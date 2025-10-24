@@ -308,137 +308,87 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
 
-    // --- Lógica de Autenticación (¡¡MODIFICADA con lógica de Claude!!) ---
-
-    // Función para mostrar la aplicación principal (oculta login)
-    function showMainApp() {
-        if (loginView) {
-            loginView.classList.add('hidden');
-        }
-        // Asegurémonos que authContainer (header info) NO se oculte aquí
-        // if (authContainer) {
-        //     authContainer.classList.add('hidden'); // Comentado - No queremos ocultar el header
-        // }
-        if (mainContent) {
-            mainContent.classList.remove('hidden');
-        }
-        // Actualizar header UI con datos del usuario
-        updateAuthUI();
-    }
-
-    // Función para mostrar la pantalla de login (oculta app)
-    function showLoginScreen() {
-        if (mainContent) {
-            mainContent.classList.add('hidden');
-        }
-        // Mostrar el contenedor del botón de login
-        if (loginView) {
-            loginView.classList.remove('hidden');
-        }
-         // Ocultar la información del usuario en el header al hacer logout
-         if (authContainer) {
-             authContainer.innerHTML = ''; // Limpiar contenido del header
-         }
-         if (userProfilePic) userProfilePic.classList.add('hidden');
-         if (logoutBtn) logoutBtn.classList.add('hidden');
-         if (pointsContainer) pointsContainer.classList.add('hidden');
-    }
-
-    // Función para actualizar el header con la info del usuario
-    function updateAuthUI() {
-         const user = auth.currentUser; // Obtener usuario actual de Firebase Auth
-         if (user && authContainer) {
-             // Reemplazar contenido del authContainer con nombre, puntos, foto y botón logout
-             authContainer.innerHTML = `
-                 <div class="flex items-center gap-2">
-                     <span id="points" class="text-sm font-semibold text-yellow-400 bg-slate-700 px-3 py-1 rounded-full">${state.points || 0} pts</span>
-                     <img id="user-profile-pic" src="${user.photoURL || 'https://placehold.co/40x40/7f7f7f/ffffff?text=?'}" alt="User" class="w-8 h-8 rounded-full border-2 border-slate-500">
-                     <button id="logout-btn" class="p-1 text-slate-400 hover:text-white">
-                         <i data-lucide="log-out" class="w-5 h-5"></i>
-                     </button>
-                 </div>
-             `;
-             lucide.createIcons(); // Crear icono de logout
-             // Re-asignar listener al nuevo botón logout
-             const newLogoutBtn = document.getElementById('logout-btn');
-             if (newLogoutBtn) {
-                 newLogoutBtn.addEventListener('click', logout); // Llamar a la función logout
-             }
-         } else if (authContainer) {
-             // Si no hay usuario, limpiar el header
-             authContainer.innerHTML = '';
-         }
-    }
-
-
-    // Listener principal de cambio de estado de autenticación
+    // --- Lógica de Autenticación (Versión Pre-Flashcard Fix) ---
     onAuthStateChanged(auth, (user) => {
         if (user) {
             // Usuario está logueado
             currentUserId = user.uid;
             console.log("Usuario logueado:", currentUserId);
-            showMainApp(); // Ocultar login, mostrar app, actualizar header
-            listenToUserData(currentUserId); // Cargar/Escuchar datos del usuario
+
+            // Ocultar la vista/modal de login
+            if (loginView) loginView.classList.add('hidden'); // Oculta el div de bienvenida/login
+            if (authContainer) authContainer.classList.add('hidden'); // Oculta por si acaso (si es diferente a loginView)
+
+            // Mostrar el contenido principal
+            if (mainContent) mainContent.classList.remove('hidden');
+
+            // Actualizar header
+            if (userProfilePic && user.photoURL) {
+                userProfilePic.src = user.photoURL;
+                userProfilePic.classList.remove('hidden');
+            }
+            if (logoutBtn) logoutBtn.classList.remove('hidden');
+            if (pointsContainer) pointsContainer.classList.remove('hidden');
+
+            // Cargar datos
+            listenToUserData(currentUserId);
+
         } else {
             // Usuario está deslogueado
             currentUserId = null;
             console.log("Usuario deslogueado.");
-            showLoginScreen(); // Mostrar login, ocultar app, limpiar header
+
+            // Mostrar la vista/modal de login
+            if (loginView) loginView.classList.remove('hidden'); // Muestra el div de bienvenida/login
+            if (authContainer) authContainer.classList.remove('hidden'); // Muestra por si acaso
+
+            // Ocultar el contenido principal
+            if (mainContent) mainContent.classList.add('hidden');
+
+            // Ocultar header
+            if (userProfilePic) userProfilePic.classList.add('hidden');
+            if (logoutBtn) logoutBtn.classList.add('hidden');
+            if (pointsContainer) pointsContainer.classList.add('hidden');
 
             // Detener escucha de datos
             if (unsubscribeFromFirestore) {
                 unsubscribeFromFirestore();
                 unsubscribeFromFirestore = null;
             }
+
             // Resetear estado
             state = { ...defaultState };
             render(); // Renderizar UI vacía (oculta)
         }
     });
 
-    // Función para iniciar sesión
-    async function loginWithGoogle() {
-        const provider = new GoogleAuthProvider();
-        try {
-            await signInWithPopup(auth, provider);
-            // onAuthStateChanged se encargará del resto
-        } catch (error) {
-            console.error("Error al iniciar sesión: ", error);
-             let errorMessage = "Error al iniciar sesión. ";
-             if (error.code === 'auth/popup-blocked') {
-                 errorMessage += "El popup fue bloqueado. Permite popups.";
-             } else if (error.code === 'auth/popup-closed-by-user') {
-                 errorMessage = "Login cancelado."; // No mostrar error si el usuario cierra
-             } else {
-                 errorMessage += "Inténtalo de nuevo.";
-             }
-             if (error.code !== 'auth/popup-closed-by-user') {
-                showNotification(errorMessage);
-             }
-        }
-    }
-
-     // Función para cerrar sesión (logout)
-     async function logout() {
-         try {
-             await signOut(auth);
-             showNotification("Sesión cerrada.");
-             // onAuthStateChanged se encargará de mostrar la pantalla de login
-         } catch (error) {
-             console.error("Error al cerrar sesión: ", error);
-             showNotification("Error al cerrar sesión.");
-         }
-     }
-
-    // Asignar listener al botón de login INICIAL
     if (loginBtn) {
-        loginBtn.addEventListener('click', loginWithGoogle);
+        loginBtn.addEventListener('click', async () => {
+            const provider = new GoogleAuthProvider();
+            try {
+                await signInWithPopup(auth, provider);
+            } catch (error) {
+                console.error("Error al iniciar sesión: ", error);
+                if (error.code !== 'auth/popup-closed-by-user') {
+                    showNotification("Error al iniciar sesión. Inténtalo de nuevo.");
+                }
+            }
+        });
     }
-    // El listener del botón logout se asigna dinámicamente en updateAuthUI
+
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', async () => {
+            try {
+                await signOut(auth);
+            } catch (error) {
+                console.error("Error al cerrar sesión: ", error);
+                showNotification("Error al cerrar sesión.");
+            }
+        });
+    }
 
 
     // --- Lógica de la App (sin cambios significativos, solo chequeos null) ---
-    // ... (El resto del código desde la función navigate() hasta el final sigue igual) ...
 
     function navigate(viewId) {
         state.currentView = viewId;
