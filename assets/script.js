@@ -1,3 +1,5 @@
+console.log("--- SCRIPT DE FOCUS DECK v3 CARGADO ---"); // <-- v3!
+
 // --- IMPORTACIONES DE FIREBASE ---
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-analytics.js";
@@ -308,87 +310,142 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
 
-    // --- Lógica de Autenticación (Versión Pre-Flashcard Fix) ---
+    // --- Lógica de Autenticación (¡¡NUEVO ENFOQUE FORZADO!!) ---
     onAuthStateChanged(auth, (user) => {
+        console.log("Auth state changed. User:", user ? user.uid : 'null'); // Log para ver si se ejecuta
+
         if (user) {
             // Usuario está logueado
             currentUserId = user.uid;
-            console.log("Usuario logueado:", currentUserId);
+            console.log("Intentando mostrar app principal...");
 
-            // Ocultar la vista/modal de login
-            if (loginView) loginView.classList.add('hidden'); // Oculta el div de bienvenida/login
-            if (authContainer) authContainer.classList.add('hidden'); // Oculta por si acaso (si es diferente a loginView)
-
-            // Mostrar el contenido principal
-            if (mainContent) mainContent.classList.remove('hidden');
-
-            // Actualizar header
-            if (userProfilePic && user.photoURL) {
-                userProfilePic.src = user.photoURL;
-                userProfilePic.classList.remove('hidden');
+            // --- Forzar ocultar login ---
+            if (loginView) {
+                console.log("Ocultando loginView...");
+                loginView.classList.add('hidden');
+                loginView.style.display = 'none'; // Forzar ocultar con estilo
+            } else {
+                console.warn("Elemento loginView no encontrado");
             }
-            if (logoutBtn) logoutBtn.classList.remove('hidden');
-            if (pointsContainer) pointsContainer.classList.remove('hidden');
+            // --- Forzar mostrar app ---
+            if (mainContent) {
+                console.log("Mostrando mainContent...");
+                mainContent.classList.remove('hidden');
+                mainContent.style.display = 'block'; // Forzar mostrar con estilo (o 'flex', 'grid' según tu layout)
+            } else {
+                console.warn("Elemento mainContent no encontrado");
+            }
+
+            // Actualizar header (esto parece funcionar)
+             if (authContainer) {
+                 authContainer.innerHTML = `
+                     <div class="flex items-center gap-2">
+                         <span id="points" class="text-sm font-semibold text-yellow-400 bg-slate-700 px-3 py-1 rounded-full">${state.points || 0} pts</span>
+                         <img id="user-profile-pic" src="${user.photoURL || 'https://placehold.co/40x40/7f7f7f/ffffff?text=?'}" alt="User" class="w-8 h-8 rounded-full border-2 border-slate-500">
+                         <button id="logout-btn" class="p-1 text-slate-400 hover:text-white">
+                             <i data-lucide="log-out" class="w-5 h-5"></i>
+                         </button>
+                     </div>
+                 `;
+                 lucide.createIcons();
+                 const newLogoutBtn = document.getElementById('logout-btn');
+                 if (newLogoutBtn) {
+                     newLogoutBtn.addEventListener('click', logout);
+                 }
+             } else {
+                 console.warn("Elemento authContainer no encontrado");
+             }
+
 
             // Cargar datos
+            console.log("Llamando a listenToUserData...");
             listenToUserData(currentUserId);
 
         } else {
             // Usuario está deslogueado
             currentUserId = null;
-            console.log("Usuario deslogueado.");
+            console.log("Intentando mostrar pantalla de login...");
 
-            // Mostrar la vista/modal de login
-            if (loginView) loginView.classList.remove('hidden'); // Muestra el div de bienvenida/login
-            if (authContainer) authContainer.classList.remove('hidden'); // Muestra por si acaso
+             // --- Forzar mostrar login ---
+            if (loginView) {
+                console.log("Mostrando loginView...");
+                loginView.classList.remove('hidden');
+                loginView.style.display = 'block'; // O el display original (ej: 'flex' si era un flex container)
+            } else {
+                 console.warn("Elemento loginView no encontrado");
+            }
+             // --- Forzar ocultar app ---
+            if (mainContent) {
+                console.log("Ocultando mainContent...");
+                mainContent.classList.add('hidden');
+                mainContent.style.display = 'none'; // Forzar ocultar
+            } else {
+                 console.warn("Elemento mainContent no encontrado");
+            }
 
-            // Ocultar el contenido principal
-            if (mainContent) mainContent.classList.add('hidden');
-
-            // Ocultar header
-            if (userProfilePic) userProfilePic.classList.add('hidden');
-            if (logoutBtn) logoutBtn.classList.add('hidden');
-            if (pointsContainer) pointsContainer.classList.add('hidden');
+            // Limpiar header
+            if (authContainer) {
+                authContainer.innerHTML = '';
+            }
 
             // Detener escucha de datos
             if (unsubscribeFromFirestore) {
+                console.log("Deteniendo escucha de Firestore.");
                 unsubscribeFromFirestore();
                 unsubscribeFromFirestore = null;
             }
 
             // Resetear estado
+            console.log("Reseteando estado.");
             state = { ...defaultState };
             render(); // Renderizar UI vacía (oculta)
         }
     });
 
-    if (loginBtn) {
-        loginBtn.addEventListener('click', async () => {
+    // --- Funciones login/logout (sin cambios) ---
+     async function loginWithGoogle() {
             const provider = new GoogleAuthProvider();
             try {
+                console.log("Iniciando popup de login...");
                 await signInWithPopup(auth, provider);
+                console.log("Popup cerrado, esperando onAuthStateChanged...");
             } catch (error) {
                 console.error("Error al iniciar sesión: ", error);
-                if (error.code !== 'auth/popup-closed-by-user') {
-                    showNotification("Error al iniciar sesión. Inténtalo de nuevo.");
-                }
+                 let errorMessage = "Error al iniciar sesión. ";
+                 if (error.code === 'auth/popup-blocked') {
+                     errorMessage += "El popup fue bloqueado. Permite popups.";
+                 } else if (error.code === 'auth/popup-closed-by-user') {
+                     errorMessage = null; // No mostrar error si el usuario cierra
+                 } else {
+                     errorMessage += "Inténtalo de nuevo.";
+                 }
+                 if (errorMessage) {
+                    showNotification(errorMessage);
+                 }
             }
-        });
-    }
+        }
 
-    if (logoutBtn) {
-        logoutBtn.addEventListener('click', async () => {
-            try {
-                await signOut(auth);
-            } catch (error) {
-                console.error("Error al cerrar sesión: ", error);
-                showNotification("Error al cerrar sesión.");
-            }
-        });
+     async function logout() {
+         try {
+             console.log("Cerrando sesión...");
+             await signOut(auth);
+             showNotification("Sesión cerrada.");
+             // onAuthStateChanged se encargará de mostrar la pantalla de login
+         } catch (error) {
+             console.error("Error al cerrar sesión: ", error);
+             showNotification("Error al cerrar sesión.");
+         }
+     }
+
+    // Asignar listener al botón de login INICIAL
+    if (loginBtn) {
+        loginBtn.addEventListener('click', loginWithGoogle);
     }
+    // El listener del botón logout se asigna dinámicamente en updateAuthUI
 
 
     // --- Lógica de la App (sin cambios significativos, solo chequeos null) ---
+    // ... (El resto del código desde la función navigate() hasta el final sigue igual) ...
 
     function navigate(viewId) {
         state.currentView = viewId;
@@ -423,7 +480,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // Actualizar elementos comunes
-        if (pointsEl) pointsEl.textContent = state.points || 0; // Mostrar 0 si no hay puntos
+        // Los puntos ahora se actualizan en updateAuthUI
+        // if (pointsEl) pointsEl.textContent = state.points || 0;
         updatePomodoroUI();
         if (lucide) lucide.createIcons(); // Re-renderizar iconos
     }
@@ -719,10 +777,18 @@ document.addEventListener('DOMContentLoaded', () => {
             const deck = state.decks.find(d => d.id === state.currentDeckId);
             if (deck) {
                 if (!Array.isArray(deck.cards)) deck.cards = [];
+                 // Validar entradas
+                 const question = cardQuestionInput.value.trim();
+                 const answer = cardAnswerInput.value.trim();
+                 if (!question || !answer) {
+                     showNotification("La pregunta y la respuesta son obligatorias.");
+                     return;
+                 }
+
                 const newCard = {
                     id: 'card_' + Date.now(),
-                    question: cardQuestionInput.value.trim(),
-                    answer: cardAnswerInput.value.trim(),
+                    question: question,
+                    answer: answer,
                     questionImg: cardQuestionImgInput.value.trim() || null,
                     answerImg: cardAnswerImgInput.value.trim() || null,
                     interval: 0,
@@ -754,7 +820,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (deleteDeckBtn) {
         deleteDeckBtn.addEventListener('click', () => {
-            if (window.confirm("¿Estás seguro de que quieres eliminar este tema y todas sus tarjetas? Esta acción no se puede deshacer.")) {
+            // Usar modal custom en lugar de confirm
+            // TODO: Implementar un modal custom para confirmación
+            if (confirm("¿Estás seguro de que quieres eliminar este tema y todas sus tarjetas? Esta acción no se puede deshacer.")) {
                  if (!state.decks) state.decks = [];
                 state.decks = state.decks.filter(d => d.id !== state.currentDeckId);
                 navigate(VIEWS.DASHBOARD); // Volver al dashboard
@@ -764,7 +832,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
 
-    // --- Lógica de Sesión de Estudio (Study - Versión Pre-Flashcard Fix) ---
+    // --- Lógica de Sesión de Estudio (Study - ¡CON BUG CORREGIDO!) ---
 
     function startStudySession() {
         if (!state.decks) state.decks = [];
@@ -839,14 +907,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Ocultar respuesta
         if (studyAnswerImg) {
-            studyAnswerImg.src = '';
+            studyAnswerImg.src = ''; // Limpiar src
             studyAnswerImg.classList.add('hidden');
             studyAnswerImg.onerror = () => { if(studyAnswerImg) studyAnswerImg.classList.add('hidden'); };
         }
         if (studyAnswerTextEl) {
-             // VERSIÓN CON BUG: Muestra la PREGUNTA en lugar de la RESPUESTA
-             // Lo dejamos así para volver a la versión anterior que sí funcionaba para login
-             studyAnswerTextEl.textContent = currentCard.question;
+             // ¡CORRECCIÓN DEL BUG DE FLASHCARD!
+             // Pre-cargar la respuesta correcta aquí, pero mantenerla oculta
+             studyAnswerTextEl.textContent = currentCard.answer;
             if (studyAnswerTextEl.parentElement) studyAnswerTextEl.parentElement.classList.add('hidden');
         }
 
@@ -873,9 +941,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 studyAnswerImg.classList.toggle('hidden', !currentCard.answerImg);
             }
              if (studyAnswerTextEl && studyAnswerTextEl.parentElement) {
-                // VERSIÓN CON BUG: Actualizamos el texto aquí al mostrar,
-                // usando la respuesta correcta esta vez.
-                studyAnswerTextEl.textContent = currentCard.answer;
+                // Ya no necesitamos actualizar el texto aquí, solo mostrar el contenedor
                 studyAnswerTextEl.parentElement.classList.remove('hidden');
             }
 
@@ -974,6 +1040,7 @@ document.addEventListener('DOMContentLoaded', () => {
         quizState.score = 0;
         quizState.answered = false;
 
+        navigate(VIEWS.QUIZ); // Navegar a la vista del quiz
         renderQuizView(); // Iniciar renderizado del quiz
     }
 
@@ -990,7 +1057,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
          // Si aún faltan opciones (ej: pocas tarjetas), añadir placeholders o repetir (menos ideal)
          while (options.length < 4) {
-             options.push(`Opción ${options.length + 1}`); // Placeholder simple
+             const placeholder = `Opción Inválida ${options.length}`;
+             if (!options.includes(placeholder)) { // Evitar duplicar placeholders
+                options.push(placeholder);
+             } else {
+                 options.push(Math.random().toString(36).substring(7)); // Opción aleatoria si falla todo
+             }
          }
 
         options.sort(() => Math.random() - 0.5); // Barajar opciones finales
