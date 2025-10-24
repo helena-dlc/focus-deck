@@ -1,779 +1,1244 @@
-// Importar funciones de Firebase SDK
-import { initializeApp } from "https://www.gstatic.com/firebasejs/9.19.1/firebase-app.js";
-import { 
-    getAuth, 
-    GoogleAuthProvider, 
-    signInWithPopup, 
-    signOut, 
-    onAuthStateChanged 
-} from "https://www.gstatic.com/firebasejs/9.19.1/firebase-auth.js";
-import { 
-    getFirestore, 
-    doc, 
-    getDoc, 
-    setDoc, 
-    updateDoc, 
-    collection, 
-    addDoc, 
-    onSnapshot, 
-    query, 
-    where, 
-    Timestamp,
-    increment,
-    writeBatch,
-    getDocs,
-    deleteDoc
-} from "https://www.gstatic.com/firebasejs/9.19.1/firebase-firestore.js";
+console.log("--- SCRIPT DE FOCUS DECK v4 CARGADO ---"); // <-- v4!
 
-// --- Configuración de Firebase (proporcionada por el usuario) ---
+// --- IMPORTACIONES DE FIREBASE ---
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-analytics.js";
+import {
+    getAuth,
+    onAuthStateChanged,
+    GoogleAuthProvider,
+    signInWithPopup,
+    signOut
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {
+    getFirestore,
+    doc,
+    setDoc,
+    onSnapshot,
+    Timestamp,
+    updateDoc,
+    arrayUnion,
+    getDoc // Necesario para la carga inicial robusta
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+
+// --- CONFIGURACIÓN DE FIREBASE ---
 const firebaseConfig = {
-    apiKey: "AIzaSyC6tqffatZ7NhMm5bGRh0kmjCLymj0DD74",
-    authDomain: "focus-deck.firebaseapp.com",
-    projectId: "focus-deck",
-    storageBucket: "focus-deck.appspot.com",
-    messagingSenderId: "81821453657",
-    // appId: "1:81821453657:web:TU_APP_ID" // Opcional, pero recomendado si lo tienes
+  apiKey: "AIzaSyC6tqffatZ7NhMm5bGRh0kmjCLymj0DD74", // Asegúrate que esta sigue siendo tu clave correcta
+  authDomain: "focus-deck.firebaseapp.com",
+  projectId: "focus-deck",
+  storageBucket: "focus-deck.firebasestorage.app",
+  messagingSenderId: "81821453657",
+  appId: "1:81821453657:web:deb38c2d4b00113bec9048",
+  measurementId: "G-YNNE0HPCK2"
 };
 
-// --- Inicialización de Firebase ---
+// --- INICIALIZAR FIREBASE ---
 const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const provider = new GoogleAuthProvider();
 
-// --- Variables de Estado Globales ---
-let userId = null;
-let currentDeckId = null;
-let globalStats = { points: 0, streak: 0, totalStudyTime: 0 };
-let activeTimerInterval = null;
-let sessionStartTime = 0;
-
-let studySession = {
-    cards: [],
-    currentIndex: 0,
-    pointsEarned: 0
+// --- ESTADO GLOBAL ---
+let currentUserId = null;
+let unsubscribeFromFirestore = null;
+const defaultState = {
+    points: 0,
+    decks: [],
+    tasks: [],
+    studyLog: [],
+    studyTimeMinutes: 0,
+    currentView: 'dashboard-view',
+    currentDeckId: null,
+    pomodoro: {
+        timer: null,
+        timeLeft: 25 * 60,
+        isBreak: false,
+        isRunning: false,
+        endTime: null,
+    },
+    studySession: {
+        cardsToReview: [],
+        currentCardIndex: 0,
+        correctAnswers: 0,
+    }
 };
+let state = { ...defaultState };
 
-let quizSession = {
-    cards: [],
-    currentIndex: 0,
-    correctCount: 0,
-    pointsEarned: 0
-};
 
-let unsubscribeStats = () => {};
-let unsubscribeDecks = () => {};
-let unsubscribeCards = () => {};
+document.addEventListener('DOMContentLoaded', () => {
+    lucide.createIcons();
 
-// --- Selectores de Elementos del DOM ---
-const views = {
-    loading: document.getElementById('loading-view'),
-    login: document.getElementById('login-view'),
-    app: document.getElementById('app-view'),
-    dashboard: document.getElementById('dashboard-view'),
-    deck: document.getElementById('deck-view'),
-    study: document.getElementById('study-view'),
-    quiz: document.getElementById('quiz-view')
-};
+    const VIEWS = {
+        DASHBOARD: 'dashboard-view',
+        STUDY: 'study-view',
+        MANAGE: 'manage-deck-view',
+        QUIZ: 'quiz-view',
+    };
 
-// Elementos del Header
-const userPhoto = document.getElementById('user-photo');
-const userName = document.getElementById('user-name');
-const statsPoints = document.getElementById('stats-points');
+    // --- Elementos del DOM ---
+    // (Asegúrate que TODOS estos IDs existen en tu index.html)
+    const views = document.querySelectorAll('.view');
+    const dashboardView = document.getElementById('dashboard-view');
+    const studyView = document.getElementById('study-view');
+    const manageDeckView = document.getElementById('manage-deck-view');
+    const quizView = document.getElementById('quiz-view');
+    const authContainer = document.getElementById('auth-container');
+    const loginView = document.getElementById('login-view');
+    const mainContent = document.getElementById('main-content');
+    const loginBtn = document.getElementById('login-btn');
+    // Header elements will be looked up dynamically after login
+    const pomodoroTimerEl = document.getElementById('pomodoro-timer');
+    const startPomodoroBtn = document.getElementById('start-pomodoro-btn');
+    const resetPomodoroBtn = document.getElementById('reset-pomodoro-btn');
+    const taskInput = document.getElementById('task-input');
+    const taskPriority = document.getElementById('task-priority');
+    const addTaskBtn = document.getElementById('add-task-btn');
+    const taskList = document.getElementById('task-list');
+    // Points element is inside authContainer, looked up dynamically
+    const newDeckBtn = document.getElementById('new-deck-btn');
+    const deckList = document.getElementById('deck-list');
+    const noDecksMessage = document.getElementById('no-decks-message');
+    const streakEl = document.getElementById('streak-days');
+    const studyTimeEl = document.getElementById('study-time');
+    const totalDomainEl = document.getElementById('total-domain');
+    const domainByDeckList = document.getElementById('domain-by-deck-list');
+    const manageDeckTitle = document.getElementById('manage-deck-title');
+    const cardList = document.getElementById('card-list');
+    const addCardForm = document.getElementById('add-card-form');
+    const cardQuestionInput = document.getElementById('card-question');
+    const cardAnswerInput = document.getElementById('card-answer');
+    const cardQuestionImgInput = document.getElementById('card-question-img');
+    const cardAnswerImgInput = document.getElementById('card-answer-img');
+    const deleteDeckBtn = document.getElementById('delete-deck-btn');
+    const studyDeckTitle = document.getElementById('study-deck-title');
+    const studyProgress = document.getElementById('study-progress');
+    const studyCard = document.getElementById('study-card');
+    const studyQuestionImg = document.getElementById('study-question-img');
+    const studyQuestionTextEl = document.getElementById('study-question-text');
+    const studyAnswerImg = document.getElementById('study-answer-img');
+    const studyAnswerTextEl = document.getElementById('study-answer-text');
+    const showAnswerBtn = document.getElementById('show-answer-btn');
+    const studyDifficultyBtns = document.getElementById('study-difficulty-btns');
+    const quizDeckTitle = document.getElementById('quiz-deck-title');
+    const quizProgress = document.getElementById('quiz-progress');
+    const quizQuestionText = document.getElementById('quiz-question-text');
+    const quizOptionsList = document.getElementById('quiz-options');
+    const quizFeedback = document.getElementById('quiz-feedback');
+    const nextQuizQuestionBtn = document.getElementById('next-quiz-question-btn');
+    const notification = document.getElementById('notification');
 
-// Elementos del Dashboard
-const statsStreak = document.getElementById('stats-streak');
-const statsTime = document.getElementById('stats-time');
-const statsPointsDash = document.getElementById('stats-points-dash');
-const deckList = document.getElementById('deck-list');
-const noDecksMsg = document.getElementById('no-decks-msg');
+    // --- Navegación ---
+    document.getElementById('back-to-dashboard-study')?.addEventListener('click', () => navigate(VIEWS.DASHBOARD));
+    document.getElementById('back-to-dashboard-manage')?.addEventListener('click', () => navigate(VIEWS.DASHBOARD));
+    document.getElementById('back-to-dashboard-quiz')?.addEventListener('click', () => navigate(VIEWS.DASHBOARD));
 
-// Elementos de la Vista de Mazo
-const deckTitle = document.getElementById('deck-title');
-const studyCount = document.getElementById('study-count');
-const quizCount = document.getElementById('quiz-count');
-const cardList = document.getElementById('card-list');
-const noCardsMsg = document.getElementById('no-cards-msg');
 
-// --- Función de Navegación (Router Simple) ---
-function showView(viewId) {
-    Object.values(views).forEach(view => view.style.display = 'none');
-    if (views[viewId]) {
-        views[viewId].style.display = 'flex';
-        if(viewId === 'app') views[viewId].style.display = 'block'; // app-view es block
-        if(viewId === 'dashboard' || viewId === 'deck' || viewId === 'study' || viewId === 'quiz') {
-            views.app.style.display = 'block'; // Asegurarse que el contenedor de app esté visible
-            views[viewId].style.display = 'block'; // Vistas dentro de app
+    // --- State Management & Persistence ---
+
+    async function saveStateToFirestore() {
+        if (!currentUserId) return;
+        console.log("Guardando estado para:", currentUserId, state); // Log estado antes de guardar
+        try {
+            // Crear copia profunda para evitar modificar el estado original durante el guardado
+            const stateToSave = JSON.parse(JSON.stringify(state));
+
+            delete stateToSave.pomodoro?.timer;
+            stateToSave.studySession = defaultState.studySession;
+
+            // Asegurar que decks, tasks y studyLog son arrays
+             stateToSave.decks = Array.isArray(stateToSave.decks) ? stateToSave.decks : [];
+             stateToSave.tasks = Array.isArray(stateToSave.tasks) ? stateToSave.tasks : [];
+             stateToSave.studyLog = Array.isArray(stateToSave.studyLog) ? stateToSave.studyLog : [];
+
+
+            // Convertir fechas string a Timestamps ANTES de guardar
+            stateToSave.decks = stateToSave.decks.map(deck => ({
+                ...deck,
+                cards: (Array.isArray(deck.cards) ? deck.cards : []).map(card => {
+                    let nextReviewDateTS = card.nextReviewDate;
+                    if (nextReviewDateTS && typeof nextReviewDateTS === 'string') {
+                        try {
+                            // Intentar parsear como YYYY-MM-DD y convertir a Timestamp UTC
+                            const date = new Date(nextReviewDateTS + 'T00:00:00Z');
+                            if (!isNaN(date.getTime())) {
+                                nextReviewDateTS = Timestamp.fromDate(date);
+                            } else {
+                                console.warn("Fecha inválida al guardar:", nextReviewDateTS);
+                                nextReviewDateTS = Timestamp.now();
+                            }
+                        } catch (e) {
+                            console.error("Error convirtiendo fecha string a Timestamp:", nextReviewDateTS, e);
+                            nextReviewDateTS = Timestamp.now();
+                        }
+                    } else if (!(nextReviewDateTS instanceof Timestamp)) {
+                        // Si no es string ni Timestamp válido, poner ahora
+                        nextReviewDateTS = Timestamp.now();
+                    }
+                    return { ...card, nextReviewDate: nextReviewDateTS };
+                })
+            }));
+
+
+            const userDocRef = doc(db, "users", currentUserId);
+            // Usar setDoc SIN merge para asegurar que se guarde todo el estado limpio
+            await setDoc(userDocRef, stateToSave);
+            console.log("Estado guardado correctamente en Firestore.");
+        } catch (error) {
+            console.error("Error guardando estado en Firestore: ", error);
+            showNotification("Error al guardar tu progreso.");
         }
     }
-}
 
-// --- Lógica de Autenticación ---
+    // Función para procesar datos cargados de Firestore
+    function processLoadedData(data) {
+        console.log("Procesando datos cargados:", data);
+        const loadedState = { ...defaultState, ...data }; // Combinar con default para asegurar estructura
 
-document.getElementById('login-btn').addEventListener('click', async () => {
-    try {
-        await signInWithPopup(auth, provider);
-        // onAuthStateChanged se encargará del resto
-    } catch (error) {
-        console.error("Error durante el inicio de sesión:", error);
-        alert("Error al iniciar sesión: " + error.message);
-    }
-});
+        // Limpiar/Resetear partes volátiles
+        loadedState.pomodoro = { ...defaultState.pomodoro, ...(loadedState.pomodoro || {}) };
+        loadedState.pomodoro.isRunning = false; // Timer siempre se detiene al cargar
+        loadedState.pomodoro.timer = null;
+        loadedState.studySession = defaultState.studySession; // Nunca restaurar sesión de estudio
 
-document.getElementById('logout-btn').addEventListener('click', async () => {
-    try {
-        // Detener listeners antes de desloguear
-        unsubscribeAll();
-        await signOut(auth);
-        // onAuthStateChanged se encargará de mostrar el login
-    } catch (error) {
-        console.error("Error al cerrar sesión:", error);
-    }
-});
+        // Asegurar que arrays son arrays y convertir Timestamps
+        loadedState.decks = Array.isArray(loadedState.decks) ? loadedState.decks : [];
+        loadedState.tasks = Array.isArray(loadedState.tasks) ? loadedState.tasks : [];
+        loadedState.studyLog = Array.isArray(loadedState.studyLog) ? loadedState.studyLog : [];
 
-onAuthStateChanged(auth, (user) => {
-    if (user) {
-        userId = user.uid;
-        // console.log("Usuario autenticado:", userId);
-        showView('loading'); // Mostrar carga mientras se obtienen datos
-        initUserData(user).then(() => {
-            renderUserProfile(user);
-            attachDataListeners();
-            showView('dashboard');
-        });
-    } else {
-        userId = null;
-        unsubscribeAll();
-        showView('login');
-    }
-});
-
-function renderUserProfile(user) {
-    userPhoto.src = user.photoURL || `https://placehold.co/40x40/4a5568/a0aec0?text=${user.displayName[0]}`;
-    userName.textContent = user.displayName;
-}
-
-async function initUserData(user) {
-    const userRef = doc(db, 'users', user.uid);
-    try {
-        const userSnap = await getDoc(userRef);
-        if (!userSnap.exists()) {
-            // Crear perfil de usuario si no existe
-            await setDoc(userRef, {
-                email: user.email,
-                name: user.displayName,
-                photoURL: user.photoURL,
-                points: 0,
-                streak: 1,
-                totalStudyTime: 0, // en segundos
-                lastLogin: Timestamp.now()
-            });
-        } else {
-            // Usuario existe, comprobar racha
-            const data = userSnap.data();
-            const lastLogin = data.lastLogin.toDate();
-            const today = new Date();
-            
-            const isSameDay = today.toDateString() === lastLogin.toDateString();
-            
-            if (!isSameDay) {
-                const yesterday = new Date(today);
-                yesterday.setDate(today.getDate() - 1);
-                const isYesterday = yesterday.toDateString() === lastLogin.toDateString();
-                
-                let newStreak = 1;
-                if (isYesterday) {
-                    newStreak = data.streak + 1;
+        loadedState.decks = loadedState.decks.map(deck => ({
+            ...deck,
+            cards: (Array.isArray(deck.cards) ? deck.cards : []).map(card => {
+                let nextReviewDateStr = card.nextReviewDate;
+                if (nextReviewDateStr && nextReviewDateStr.toDate) { // Convertir Timestamp a YYYY-MM-DD
+                    try {
+                        nextReviewDateStr = nextReviewDateStr.toDate().toISOString().split('T')[0];
+                    } catch (e) { nextReviewDateStr = getTodayString(); }
+                } else if (typeof nextReviewDateStr !== 'string' || isNaN(new Date(nextReviewDateStr + 'T00:00:00Z').getTime())) {
+                    nextReviewDateStr = getTodayString(); // Fallback
                 }
-                
-                await updateDoc(userRef, {
-                    streak: newStreak,
-                    lastLogin: Timestamp.now()
-                });
-            }
-        }
-    } catch (error) {
-        console.error("Error inicializando datos de usuario:", error);
+                const questionImg = card.questionImg || null;
+                const answerImg = card.answerImg || null;
+                return { ...card, nextReviewDate: nextReviewDateStr, questionImg, answerImg };
+            })
+        }));
+        console.log("Estado procesado final:", loadedState);
+        return loadedState;
     }
-}
 
-// --- Lógica de Base de Datos (Listeners) ---
 
-function attachDataListeners() {
-    if (!userId) return;
-    
-    // Detener listeners antiguos
-    unsubscribeAll();
+    // Listener de Firestore (onSnapshot) - Modificado para usar processLoadedData
+    function listenToUserData(userId) {
+        if (unsubscribeFromFirestore) unsubscribeFromFirestore();
 
-    // 1. Listener para estadísticas del usuario
-    const userRef = doc(db, 'users', userId);
-    unsubscribeStats = onSnapshot(userRef, (doc) => {
-        if (doc.exists()) {
-            const data = doc.data();
-            globalStats = {
-                points: data.points,
-                streak: data.streak,
-                totalStudyTime: data.totalStudyTime
-            };
-            updateStatsUI(globalStats);
+        const userDocRef = doc(db, "users", userId);
+        console.log("Estableciendo listener onSnapshot para usuario:", userId);
+
+        unsubscribeFromFirestore = onSnapshot(userDocRef, (docSnap) => {
+            console.log("Recibido snapshot de Firestore. Existe:", docSnap.exists());
+            if (docSnap.exists()) {
+                state = processLoadedData(docSnap.data());
+            } else {
+                // Documento no existe (podría ser usuario nuevo o datos borrados)
+                console.log("Documento no existe en Firestore para el usuario. Usando estado por defecto.");
+                state = { ...defaultState };
+                 // No guardar aquí automáticamente, esperar a la primera acción del usuario
+                 // saveStateToFirestore(); // Evitar posible bucle si hay problemas
+            }
+            render(); // Renderizar UI con el estado actualizado
+            checkRunningPomodoro();
+        }, (error) => {
+            console.error("Error en listener onSnapshot: ", error);
+            showNotification("Error al sincronizar datos. Intenta recargar.");
+            // Resetear estado local si falla la escucha? Podría ser drástico.
+            // state = { ...defaultState };
+            // render();
+        });
+    }
+
+
+    async function logStudyActivity() {
+        const today = getTodayString();
+        if (!Array.isArray(state.studyLog)) state.studyLog = [];
+        if (!state.studyLog.includes(today)) {
+            console.log("Registrando actividad de estudio para racha.");
+            state.studyLog.push(today); // Actualizar estado local
+
+            if (currentUserId) {
+                try {
+                    const userDocRef = doc(db, "users", currentUserId);
+                    await updateDoc(userDocRef, { studyLog: arrayUnion(today) });
+                    console.log("StudyLog actualizado en Firestore.");
+                } catch(e) {
+                    console.error("Error actualizando studyLog con arrayUnion: ", e);
+                    await saveStateToFirestore(); // Guardar todo el estado como fallback
+                }
+            }
+            renderStats(); // Actualizar UI
         }
-    }, (error) => console.error("Error en listener de estadísticas:", error));
+    }
 
-    // 2. Listener para los mazos
-    const decksCol = collection(db, 'users', userId, 'decks');
-    unsubscribeDecks = onSnapshot(decksCol, (snapshot) => {
-        if (snapshot.empty) {
-            deckList.innerHTML = '';
-            noDecksMsg.style.display = 'block';
+
+    // --- Lógica de Autenticación (Versión Limpia) ---
+    onAuthStateChanged(auth, (user) => {
+        console.log("Auth state changed. User:", user ? user.uid : 'null');
+        if (user) {
+            // Usuario está logueado
+            currentUserId = user.uid;
+
+            // Mostrar app, ocultar login
+            if (loginView) loginView.classList.add('hidden');
+            if (mainContent) mainContent.classList.remove('hidden');
+
+            // Actualizar header dinámicamente
+            updateAuthUI(user);
+
+            // Cargar datos del usuario
+            listenToUserData(currentUserId);
+
+        } else {
+            // Usuario está deslogueado
+            currentUserId = null;
+
+            // Mostrar login, ocultar app
+            if (loginView) loginView.classList.remove('hidden');
+            if (mainContent) mainContent.classList.add('hidden');
+
+            // Limpiar header
+            updateAuthUI(null);
+
+            // Detener escucha de datos y resetear estado
+            if (unsubscribeFromFirestore) {
+                unsubscribeFromFirestore();
+                unsubscribeFromFirestore = null;
+            }
+            state = { ...defaultState };
+            render(); // Renderizar UI vacía (oculta)
+        }
+    });
+
+    // Función para actualizar el header
+    function updateAuthUI(user) {
+        if (!authContainer) return;
+        if (user) {
+            // Crear HTML del header
+            authContainer.innerHTML = `
+                <div class="flex items-center gap-2">
+                    <span id="points" class="text-sm font-semibold text-yellow-400 bg-slate-700 px-3 py-1 rounded-full">${state?.points ?? 0} pts</span>
+                    <img id="user-profile-pic" src="${user.photoURL || 'https://placehold.co/40x40/7f7f7f/ffffff?text=?'}" alt="User" class="w-8 h-8 rounded-full border-2 border-slate-500">
+                    <button id="logout-btn-dynamic" class="p-1 text-slate-400 hover:text-white">
+                        <i data-lucide="log-out" class="w-5 h-5"></i>
+                    </button>
+                </div>
+            `;
+            lucide.createIcons();
+            // Añadir listener al botón logout recién creado
+            const dynamicLogoutBtn = document.getElementById('logout-btn-dynamic');
+            if (dynamicLogoutBtn) {
+                dynamicLogoutBtn.addEventListener('click', logout);
+            }
+        } else {
+            // Limpiar header si no hay usuario
+            authContainer.innerHTML = '';
+        }
+    }
+
+     // Función para iniciar sesión
+     async function loginWithGoogle() {
+        const provider = new GoogleAuthProvider();
+        try {
+            console.log("Iniciando popup de login...");
+            await signInWithPopup(auth, provider);
+            // onAuthStateChanged se encargará del resto
+        } catch (error) {
+            console.error("Error al iniciar sesión: ", error);
+             let errorMessage = "Error al iniciar sesión. ";
+             if (error.code === 'auth/popup-blocked') {
+                 errorMessage += "Popup bloqueado. Habilítalos.";
+             } else if (error.code === 'auth/popup-closed-by-user') {
+                 errorMessage = null; // No molestar si cierra
+             } else {
+                 errorMessage += "Inténtalo de nuevo.";
+             }
+             if (errorMessage) showNotification(errorMessage);
+        }
+    }
+
+     // Función para cerrar sesión (logout)
+     async function logout() {
+         try {
+             await signOut(auth);
+             showNotification("Sesión cerrada.");
+             // onAuthStateChanged se encargará de mostrar login
+         } catch (error) {
+             console.error("Error al cerrar sesión: ", error);
+             showNotification("Error al cerrar sesión.");
+         }
+     }
+
+    // Asignar listener al botón de login INICIAL
+    if (loginBtn) {
+        loginBtn.addEventListener('click', loginWithGoogle);
+    }
+    // El listener del botón logout se asigna dinámicamente en updateAuthUI
+
+
+    // --- Lógica de la App ---
+    // (El resto del código desde navigate() hasta el final,
+    // asegurándose de que las funciones usan el 'state' global
+    // y llaman a saveStateToFirestore() después de modificar datos)
+
+    function navigate(viewId) {
+        state.currentView = viewId;
+        render(); // Renderizar la nueva vista
+    }
+
+    // Render principal - Llama a los renders específicos
+    function render() {
+        if (!views || !state) return; // Asegurar que state exista
+        console.log("Renderizando vista:", state.currentView, "con estado:", state);
+
+        views.forEach(v => v.classList.add('hidden'));
+
+        // Renderizar la vista actual
+        switch (state.currentView) {
+            case VIEWS.DASHBOARD:
+                if (dashboardView) {
+                    dashboardView.classList.remove('hidden');
+                    renderDashboard(); // Llama a los renders específicos del dashboard
+                }
+                break;
+            case VIEWS.MANAGE:
+                if (manageDeckView) {
+                    manageDeckView.classList.remove('hidden');
+                    renderManageView();
+                }
+                break;
+            case VIEWS.STUDY:
+                if (studyView) {
+                    studyView.classList.remove('hidden');
+                    renderStudyView();
+                }
+                break;
+            case VIEWS.QUIZ:
+                if (quizView) {
+                    quizView.classList.remove('hidden');
+                    renderQuizView();
+                }
+                break;
+            default: // Fallback al dashboard
+                if (dashboardView) {
+                    dashboardView.classList.remove('hidden');
+                    renderDashboard();
+                }
+        }
+
+        // Actualizar elementos comunes que dependen del estado
+         // Los puntos se actualizan en updateAuthUI ahora
+        // const pointsDisplay = document.getElementById('points');
+        // if (pointsDisplay) pointsDisplay.textContent = `${state.points || 0} pts`;
+
+        updatePomodoroUI();
+        if (typeof lucide !== 'undefined') lucide.createIcons(); // Re-renderizar iconos
+    }
+
+    // --- Render Dashboard ---
+    function renderDashboard() {
+        console.log("Renderizando Dashboard...");
+        renderTaskList();
+        renderDeckList();
+        renderStats();
+    }
+
+    // --- Lógica de Tareas ---
+    function renderTaskList() {
+        if (!taskList) return;
+        console.log("Renderizando tareas:", state.tasks);
+        taskList.innerHTML = ''; // Limpiar lista
+        const tasksToRender = Array.isArray(state.tasks) ? state.tasks : [];
+
+        if (tasksToRender.length === 0) {
+            taskList.innerHTML = '<p class="text-sm text-slate-400 px-3">No hay tareas pendientes. ¡Añade una!</p>';
             return;
         }
-        
-        noDecksMsg.style.display = 'none';
-        deckList.innerHTML = ''; // Limpiar lista
-        snapshot.forEach(doc => {
-            const deck = doc.data();
-            const deckEl = document.createElement('div');
-            deckEl.className = "bg-gray-800 p-5 rounded-lg shadow-lg hover:shadow-emerald-500/20 hover:border-emerald-500 border-2 border-transparent transition-all cursor-pointer";
-            deckEl.dataset.id = doc.id;
-            deckEl.innerHTML = `
-                <h3 class="text-xl font-bold text-white mb-2">${escapeHTML(deck.name)}</h3>
-                <p class="text-sm text-gray-400">Tarjetas: ${deck.cardCount || 0}</p>
+
+        const priorityOrder = { 'Alta': 3, 'Media': 2, 'Baja': 1 };
+        const sortedTasks = [...tasksToRender].sort((a, b) => {
+             // Primero por prioridad descendente
+            const priorityDiff = (priorityOrder[b.priority] || 0) - (priorityOrder[a.priority] || 0);
+            if (priorityDiff !== 0) return priorityDiff;
+            // Luego por ID (fecha) descendente si la prioridad es la misma
+            return (b.id || 0) - (a.id || 0);
+        });
+
+        sortedTasks.forEach(task => {
+            const taskEl = document.createElement('div');
+            const priorityColor = {
+                'Alta': 'border-red-500',
+                'Media': 'border-yellow-500',
+                'Baja': 'border-teal-500',
+            }[task.priority] || 'border-slate-500';
+
+            taskEl.className = `flex items-center justify-between p-3 bg-slate-800 rounded-lg border-l-4 ${priorityColor} mb-2 group`;
+            taskEl.innerHTML = `
+                <div class="flex items-center flex-1 min-w-0 mr-2">
+                    <button data-task-id="${task.id}" class="complete-task-btn p-1 text-slate-400 hover:text-white mr-3 flex-shrink-0">
+                        <i data-lucide="circle" class="w-5 h-5"></i>
+                    </button>
+                    <span class="text-slate-200 truncate" title="${task.text}">${task.text}</span>
+                </div>
+                <button data-task-id="${task.id}" class="delete-task-btn p-1 text-slate-500 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                </button>
             `;
-            deckEl.addEventListener('click', () => openDeckView(doc.id, deck.name));
+            taskList.appendChild(taskEl);
+        });
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+    }
+
+     // Listener para añadir tarea (revisado)
+    if (addTaskBtn) {
+        addTaskBtn.addEventListener('click', () => {
+             if (!taskInput || !taskPriority) {
+                 console.error("Elementos de input/priority no encontrados");
+                 return;
+             }
+            const text = taskInput.value.trim();
+            const priority = taskPriority.value;
+            if (text) {
+                if (!Array.isArray(state.tasks)) state.tasks = []; // Asegurar que sea array
+                const newTask = {
+                    id: Date.now(), // Usar timestamp como ID simple
+                    text,
+                    priority,
+                    completed: false // Nueva tarea no está completada
+                };
+                state.tasks.push(newTask);
+                taskInput.value = ''; // Limpiar input
+                renderTaskList(); // Actualizar UI
+                saveStateToFirestore(); // Guardar en Firebase
+                 console.log("Tarea añadida:", newTask);
+            } else {
+                showNotification("El texto de la tarea no puede estar vacío.");
+            }
+        });
+    }
+
+    // Listener para completar/borrar tarea (revisado)
+    if (taskList) {
+        taskList.addEventListener('click', (e) => {
+            const completeBtn = e.target.closest('.complete-task-btn');
+            const deleteBtn = e.target.closest('.delete-task-btn');
+
+            if (completeBtn) {
+                const taskId = Number(completeBtn.dataset.taskId);
+                console.log("Completando tarea ID:", taskId);
+                 if (!Array.isArray(state.tasks)) state.tasks = [];
+                const taskIndex = state.tasks.findIndex(t => t.id === taskId);
+                 if (taskIndex > -1) {
+                     state.tasks.splice(taskIndex, 1); // Eliminar tarea completada
+                     if (isNaN(state.points)) state.points = 0; state.points += 10;
+                     logStudyActivity(); // Contar como actividad
+                     render(); // Re-renderizar todo
+                     saveStateToFirestore();
+                     showNotification("¡Tarea completada! +10 puntos");
+                 } else {
+                     console.warn("No se encontró la tarea a completar:", taskId);
+                 }
+            }
+
+            if (deleteBtn) {
+                const taskId = Number(deleteBtn.dataset.taskId);
+                 console.log("Eliminando tarea ID:", taskId);
+                 if (!Array.isArray(state.tasks)) state.tasks = [];
+                 const taskIndex = state.tasks.findIndex(t => t.id === taskId);
+                 if (taskIndex > -1) {
+                    state.tasks.splice(taskIndex, 1);
+                    renderTaskList(); // Solo re-renderizar la lista
+                    saveStateToFirestore();
+                 } else {
+                     console.warn("No se encontró la tarea a eliminar:", taskId);
+                 }
+            }
+        });
+    }
+
+    // --- Lógica de Temas (Decks) ---
+    function renderDeckList() {
+        if (!deckList || !noDecksMessage) return;
+        console.log("Renderizando decks:", state.decks);
+        deckList.innerHTML = '';
+        const decksToRender = Array.isArray(state.decks) ? state.decks : [];
+
+        if (decksToRender.length === 0) {
+            noDecksMessage.classList.remove('hidden');
+            return;
+        }
+
+        noDecksMessage.classList.add('hidden');
+        const today = getTodayString();
+
+        decksToRender.forEach(deck => {
+            const cards = Array.isArray(deck.cards) ? deck.cards : [];
+            const cardsToReview = cards.filter(c => c.nextReviewDate <= today).length;
+            const deckEl = document.createElement('div');
+            deckEl.className = 'bg-slate-800 p-5 rounded-lg shadow-lg flex flex-col justify-between';
+            deckEl.innerHTML = `
+                <div>
+                    <h3 class="text-xl font-bold text-white truncate mb-2" title="${deck.name}">${deck.name}</h3>
+                    <p class="text-sm text-slate-400 mb-4">${cards.length} tarjeta(s)</p>
+                    ${cardsToReview > 0
+                        ? `<span class="inline-block bg-teal-600 text-teal-100 text-xs font-semibold px-2 py-1 rounded-full mb-4">${cardsToReview} para repasar hoy</span>`
+                        : `<span class="inline-block bg-slate-700 text-slate-300 text-xs font-semibold px-2 py-1 rounded-full mb-4">¡Al día!</span>`
+                    }
+                </div>
+                <div class="flex gap-2">
+                    <button data-deck-id="${deck.id}" class="study-deck-btn flex-1 bg-teal-600 hover:bg-teal-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors ${cardsToReview === 0 ? 'opacity-50 cursor-not-allowed' : ''}" ${cardsToReview === 0 ? 'disabled' : ''}>
+                        Estudiar
+                    </button>
+                    <button data-deck-id="${deck.id}" class="quiz-deck-btn flex-1 bg-slate-700 hover:bg-slate-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors ${cards.length < 4 ? 'opacity-50 cursor-not-allowed' : ''}" ${cards.length < 4 ? 'disabled' : ''}>
+                        Quiz
+                    </button>
+                    <button data-deck-id="${deck.id}" class="manage-deck-btn bg-slate-700 hover:bg-slate-600 text-white font-semibold py-2 px-3 rounded-lg transition-colors">
+                        <i data-lucide="settings-2" class="w-5 h-5"></i>
+                    </button>
+                </div>
+            `;
             deckList.appendChild(deckEl);
         });
-    }, (error) => console.error("Error en listener de mazos:", error));
-}
-
-function unsubscribeAll() {
-    unsubscribeStats();
-    unsubscribeDecks();
-    unsubscribeCards();
-}
-
-function updateStatsUI(stats) {
-    statsPoints.textContent = stats.points;
-    statsPointsDash.textContent = `${stats.points} Puntos`;
-    statsStreak.textContent = `${stats.streak} Días`;
-    
-    const hours = Math.floor(stats.totalStudyTime / 3600);
-    const minutes = Math.floor((stats.totalStudyTime % 3600) / 60);
-    statsTime.textContent = `${hours}h ${minutes}m`;
-}
-
-// --- Lógica de Mazos (Decks) ---
-
-document.getElementById('add-deck-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const input = document.getElementById('deck-name-input');
-    const deckName = input.value.trim();
-    
-    if (deckName && userId) {
-        try {
-            await addDoc(collection(db, 'users', userId, 'decks'), {
-                name: deckName,
-                createdAt: Timestamp.now(),
-                cardCount: 0
-            });
-            // Dar puntos por crear mazo
-            await updateUserStats({ points: increment(10) });
-            input.value = '';
-        } catch (error) {
-            console.error("Error creando mazo:", error);
-        }
+        if (typeof lucide !== 'undefined') lucide.createIcons();
     }
-});
 
-async function openDeckView(deckId, name) {
-    currentDeckId = deckId;
-    deckTitle.textContent = name;
-    
-    // Resetear lista de tarjetas
-    cardList.innerHTML = '';
-    noCardsMsg.style.display = 'block';
-    studyCount.textContent = '0';
-    quizCount.textContent = '0';
-    
-    // Detener listener de tarjetas anterior
-    unsubscribeCards();
-    
-    // Listener para las tarjetas de este mazo
-    const cardsCol = collection(db, 'users', userId, 'decks', currentDeckId, 'flashcards');
-    unsubscribeCards = onSnapshot(cardsCol, (snapshot) => {
-        cardList.innerHTML = '';
-        if (snapshot.empty) {
-            noCardsMsg.style.display = 'block';
-            quizCount.textContent = '0';
-            studyCount.textContent = '0';
+     // Listener para crear nuevo tema (revisado)
+    if (newDeckBtn) {
+        newDeckBtn.addEventListener('click', () => {
+            const deckName = prompt("Introduce el nombre del nuevo tema:");
+            if (deckName && deckName.trim()) {
+                 if (!Array.isArray(state.decks)) state.decks = []; // Asegurar array
+                const newDeck = {
+                    id: 'deck_' + Date.now(), // Usar timestamp como ID
+                    name: deckName.trim(),
+                    cards: [] // Nuevo tema empieza sin tarjetas
+                };
+                state.decks.push(newDeck);
+                state.currentDeckId = newDeck.id; // Seleccionar el nuevo deck
+                navigate(VIEWS.MANAGE); // Ir a gestionarlo
+                saveStateToFirestore(); // Guardar
+                 console.log("Nuevo tema creado:", newDeck);
+            } else if (deckName !== null) { // Si no canceló, pero estaba vacío
+                 showNotification("El nombre del tema no puede estar vacío.");
+            }
+        });
+    }
+
+    // Listener para botones de deck (sin cambios)
+    if (deckList) {
+        deckList.addEventListener('click', (e) => {
+            const studyBtn = e.target.closest('.study-deck-btn');
+            const quizBtn = e.target.closest('.quiz-deck-btn');
+            const manageBtn = e.target.closest('.manage-deck-btn');
+
+            if (studyBtn) {
+                state.currentDeckId = studyBtn.dataset.deckId;
+                startStudySession();
+                navigate(VIEWS.STUDY);
+            }
+            if (quizBtn) {
+                state.currentDeckId = quizBtn.dataset.deckId;
+                startQuiz();
+                // navigate(VIEWS.QUIZ); // startQuiz ya navega si es válido
+            }
+            if (manageBtn) {
+                state.currentDeckId = manageBtn.dataset.deckId;
+                navigate(VIEWS.MANAGE);
+            }
+        });
+    }
+
+    // --- Lógica de Estadísticas ---
+    function renderStats() {
+        if (!streakEl || !studyTimeEl || !totalDomainEl || !domainByDeckList) return;
+         console.log("Renderizando estadísticas...");
+
+        const today = getTodayString();
+        const studyLog = Array.isArray(state.studyLog) ? state.studyLog : [];
+        const streak = calculateStreak(today, studyLog);
+        streakEl.textContent = streak;
+
+        const totalHours = ((state.studyTimeMinutes || 0) / 60).toFixed(1);
+        studyTimeEl.textContent = totalHours;
+
+        let totalCards = 0;
+        let totalMasteredCards = 0;
+        domainByDeckList.innerHTML = ''; // Limpiar lista
+
+        const decksToRender = Array.isArray(state.decks) ? state.decks : [];
+        if (decksToRender.length === 0) {
+            domainByDeckList.innerHTML = '<p class="text-sm text-slate-400 px-3">Añade temas para ver tu progreso.</p>';
+        } else {
+            decksToRender.forEach(deck => {
+                const cards = Array.isArray(deck.cards) ? deck.cards : [];
+                if (cards.length > 0) {
+                    const masteredCards = cards.filter(c => getNextInterval(c.interval || 0, 'easy') >= 21).length;
+                    const domain = Math.round((masteredCards / cards.length) * 100);
+
+                    totalCards += cards.length;
+                    totalMasteredCards += masteredCards;
+
+                    const deckStatEl = document.createElement('div');
+                    deckStatEl.className = 'mb-3 px-3';
+                    deckStatEl.innerHTML = `
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-sm text-slate-300 truncate" title="${deck.name}">${deck.name}</span>
+                            <span class="text-sm font-semibold text-white">${domain}%</span>
+                        </div>
+                        <div class="w-full bg-slate-700 rounded-full h-2">
+                            <div class="bg-teal-500 h-2 rounded-full" style="width: ${domain}%"></div>
+                        </div>
+                    `;
+                    domainByDeckList.appendChild(deckStatEl);
+                }
+            });
+        }
+
+        const globalDomain = (totalCards > 0) ? Math.round((totalMasteredCards / totalCards) * 100) : 0;
+        totalDomainEl.textContent = `${globalDomain}%`;
+    }
+
+    // Calcular racha (sin cambios)
+    function calculateStreak(todayString, studyLog) {
+        let streak = 0;
+        const dates = new Set(studyLog);
+        if (dates.size === 0) return 0;
+        if (!dates.has(todayString)) return 0; // Si no estudió hoy, racha 0
+
+        let currentDate = new Date(todayString + 'T00:00:00Z');
+        while (dates.has(currentDate.toISOString().split('T')[0])) {
+            streak++;
+            currentDate.setDate(currentDate.getDate() - 1);
+        }
+        return streak;
+    }
+
+
+    // --- Lógica de Gestionar Tema (Manage) ---
+    function renderManageView() {
+        if (!state.decks) state.decks = [];
+        const deck = state.decks.find(d => d.id === state.currentDeckId);
+        if (!deck) {
+            navigate(VIEWS.DASHBOARD);
             return;
         }
-        
-        noCardsMsg.style.display = 'none';
-        let cardsToReview = 0;
-        const now = new Date();
-        
-        snapshot.forEach(doc => {
-            const card = doc.data();
-            
-            // Contar tarjetas para estudiar
-            if (card.nextReviewDate.toDate() <= now) {
-                cardsToReview++;
-            }
-            
-            // Renderizar tarjeta en la lista
+
+        if (manageDeckTitle) manageDeckTitle.textContent = deck.name;
+        if (!cardList) return;
+        cardList.innerHTML = '';
+
+        const cards = Array.isArray(deck.cards) ? deck.cards : [];
+        if (cards.length === 0) {
+            cardList.innerHTML = '<p class="text-sm text-slate-400 px-3">No hay tarjetas. ¡Añade la primera!</p>';
+            return;
+        }
+
+        cards.forEach(card => {
             const cardEl = document.createElement('div');
-            cardEl.className = "flex justify-between items-center p-4 border-b border-gray-700 last:border-b-0";
+            cardEl.className = 'bg-slate-800 p-4 rounded-lg mb-2 flex justify-between items-start group';
+            // Añadido title para tooltips en truncate
             cardEl.innerHTML = `
-                <p class="text-gray-300 w-1/2 truncate">${escapeHTML(card.front)}</p>
-                <p class="text-gray-400 w-1/2 truncate">${escapeHTML(card.back)}</p>
-                <button data-id="${doc.id}" class="delete-card-btn text-red-500 hover:text-red-400 p-1">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
+                <div class="flex-1 overflow-hidden min-w-0 mr-4">
+                    ${card.questionImg ? `<img src="${card.questionImg}" class="max-w-full h-auto max-h-20 rounded mb-2 object-contain" onerror="this.style.display='none'">` : ''}
+                    <p class="text-slate-300 font-semibold truncate" title="${card.question}"><strong class="text-teal-400">P:</strong> ${card.question}</p>
+                    ${card.answerImg ? `<img src="${card.answerImg}" class="max-w-full h-auto max-h-20 rounded mt-2 mb-2 object-contain" onerror="this.style.display='none'">` : ''}
+                    <p class="text-slate-300 truncate" title="${card.answer}"><strong class="text-teal-400">R:</strong> ${card.answer}</p>
+                </div>
+                <button data-card-id="${card.id}" class="delete-card-btn p-1 text-slate-500 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i>
                 </button>
             `;
             cardList.appendChild(cardEl);
         });
-        
-        studyCount.textContent = cardsToReview;
-        quizCount.textContent = snapshot.size;
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+    }
 
-    }, (error) => console.error("Error en listener de tarjetas:", error));
-    
-    showView('deck');
-}
+      // Listener añadir tarjeta (revisado)
+     if (addCardForm) {
+        addCardForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            if (!Array.isArray(state.decks)) state.decks = [];
+            const deck = state.decks.find(d => d.id === state.currentDeckId);
+            if (deck) {
+                 if (!Array.isArray(deck.cards)) deck.cards = [];
+                 const question = cardQuestionInput?.value.trim();
+                 const answer = cardAnswerInput?.value.trim();
+                 if (!question || !answer) {
+                     showNotification("La pregunta y la respuesta son obligatorias.");
+                     return;
+                 }
 
-// Eliminar tarjeta (delegación de eventos)
-cardList.addEventListener('click', async (e) => {
-    const deleteBtn = e.target.closest('.delete-card-btn');
-    if (deleteBtn) {
-        const cardId = deleteBtn.dataset.id;
-        if (confirm('¿Estás seguro de que quieres eliminar esta tarjeta?')) {
-            try {
-                await deleteDoc(doc(db, 'users', userId, 'decks', currentDeckId, 'flashcards', cardId));
-                // Actualizar contador de tarjetas en el mazo
-                const deckRef = doc(db, 'users', userId, 'decks', currentDeckId);
-                await updateDoc(deckRef, { cardCount: increment(-1) });
-            } catch (error) {
-                console.error("Error eliminando tarjeta:", error);
+                const newCard = {
+                    id: 'card_' + Date.now(),
+                    question: question,
+                    answer: answer,
+                    questionImg: cardQuestionImgInput?.value.trim() || null,
+                    answerImg: cardAnswerImgInput?.value.trim() || null,
+                    interval: 0,
+                    easeFactor: 2.5,
+                    nextReviewDate: getTodayString() // String YYYY-MM-DD
+                };
+                deck.cards.push(newCard);
+                renderManageView();
+                saveStateToFirestore();
+                addCardForm.reset();
+                 console.log("Nueva tarjeta añadida:", newCard);
+            } else {
+                 console.error("No se encontró el deck actual para añadir tarjeta.");
             }
-        }
-    }
-});
-
-// Eliminar Mazo
-document.getElementById('delete-deck-btn').addEventListener('click', async () => {
-    if (!currentDeckId) return;
-    if (confirm('¿Estás seguro de que quieres eliminar este mazo? Se borrarán TODAS sus tarjetas. Esta acción no se puede deshacer.')) {
-        try {
-            showView('loading');
-            // 1. Borrar todas las tarjetas (subcolección)
-            const cardsCol = collection(db, 'users', userId, 'decks', currentDeckId, 'flashcards');
-            const cardsSnapshot = await getDocs(cardsCol);
-            const batch = writeBatch(db);
-            cardsSnapshot.forEach(doc => {
-                batch.delete(doc.ref);
-            });
-            await batch.commit();
-            
-            // 2. Borrar el documento del mazo
-            await deleteDoc(doc(db, 'users', userId, 'decks', currentDeckId));
-            
-            showView('dashboard');
-        } catch (error) {
-            console.error("Error eliminando mazo:", error);
-            alert("Error al eliminar el mazo.");
-            showView('deck'); // Volver a la vista del mazo si falla
-        }
-    }
-});
-
-document.getElementById('back-to-dash-btn').addEventListener('click', () => {
-    currentDeckId = null;
-    unsubscribeCards(); // Detener listener de tarjetas al salir
-    showView('dashboard');
-});
-
-// --- Lógica de Tarjetas (Flashcards) ---
-
-document.getElementById('add-card-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const frontInput = document.getElementById('card-front-input');
-    const backInput = document.getElementById('card-back-input');
-    const front = frontInput.value.trim();
-    const back = backInput.value.trim();
-
-    if (front && back && userId && currentDeckId) {
-        try {
-            // Añadir tarjeta
-            await addDoc(collection(db, 'users', userId, 'decks', currentDeckId, 'flashcards'), {
-                front: front,
-                back: back,
-                deckId: currentDeckId,
-                createdAt: Timestamp.now(),
-                // Estado inicial para repetición espaciada
-                easinessFactor: 2.5, // Factor de facilidad inicial
-                interval: 0, // Días hasta la próxima revisión
-                repetitions: 0, // Número de veces revisada
-                nextReviewDate: Timestamp.now() // Revisar inmediatamente
-            });
-            
-            // Actualizar contador de tarjetas en el mazo
-            const deckRef = doc(db, 'users', userId, 'decks', currentDeckId);
-            await updateDoc(deckRef, { cardCount: increment(1) });
-            
-            // Dar puntos por añadir tarjeta
-            await updateUserStats({ points: increment(1) });
-            
-            frontInput.value = '';
-            backInput.value = '';
-        } catch (error) {
-            console.error("Error añadiendo tarjeta:", error);
-        }
-    }
-});
-
-// --- Lógica de Sesión de Estudio (Repetición Espaciada) ---
-
-document.getElementById('start-study-btn').addEventListener('click', async () => {
-    if (!userId || !currentDeckId) return;
-    
-    showView('loading');
-    
-    // 1. Obtener tarjetas para repasar
-    const cardsCol = collection(db, 'users', userId, 'decks', currentDeckId, 'flashcards');
-    const q = query(cardsCol, where("nextReviewDate", "<=", Timestamp.now()));
-    
-    try {
-        const snapshot = await getDocs(q);
-        if (snapshot.empty) {
-            alert("¡Genial! No tienes tarjetas para repasar en este mazo por ahora.");
-            showView('deck');
-            return;
-        }
-        
-        studySession.cards = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        studySession.currentIndex = 0;
-        studySession.pointsEarned = 0;
-        
-        // Mezclar tarjetas (Algoritmo Fisher-Yates)
-        for (let i = studySession.cards.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [studySession.cards[i], studySession.cards[j]] = [studySession.cards[j], studySession.cards[i]];
-        }
-        
-        // 2. Iniciar UI de estudio
-        document.getElementById('study-card-total').textContent = studySession.cards.length;
-        document.getElementById('study-complete').style.display = 'none';
-        document.getElementById('study-flashcard').style.display = 'block';
-
-        startTimer('study-timer');
-        showNextStudyCard();
-        showView('study');
-        
-    } catch (error) {
-        console.error("Error al iniciar sesión de estudio:", error);
-        // ¡IMPORTANTE! Este error suele ocurrir si el índice compuesto no existe en Firestore.
-        // Firebase te dará un enlace en la consola para crearlo.
-        if (error.code === 'failed-precondition') {
-            alert("Error: La base de datos requiere un índice para esta consulta. Por favor, revisa la consola de depuración (F12) para ver el enlace y crear el índice en Firebase.");
-        }
-        showView('deck');
-    }
-});
-
-function showNextStudyCard() {
-    if (studySession.currentIndex >= studySession.cards.length) {
-        // Sesión terminada
-        endStudySession();
-        return;
-    }
-    
-    const card = studySession.cards[studySession.currentIndex];
-    document.getElementById('study-card-front').textContent = card.front;
-    document.getElementById('study-card-back').textContent = card.back;
-    document.getElementById('study-card-count').textContent = studySession.currentIndex + 1;
-    
-    // Resetear tarjeta
-    document.getElementById('study-flashcard').classList.remove('is-flipped');
-    document.getElementById('study-controls-show').style.display = 'block';
-    document.getElementById('study-controls-review').style.display = 'none';
-}
-
-document.getElementById('show-answer-btn').addEventListener('click', () => {
-    document.getElementById('study-flashcard').classList.add('is-flipped');
-    document.getElementById('study-controls-show').style.display = 'none';
-    document.getElementById('study-controls-review').style.display = 'grid';
-});
-
-// Event listener para botones de revisión
-document.getElementById('study-controls-review').addEventListener('click', (e) => {
-    const btn = e.target.closest('.review-btn');
-    if (btn) {
-        const quality = parseInt(btn.dataset.quality, 10); // Calidad: 1 (Otra vez), 2 (Difícil), 3 (Bien), 4 (Fácil)
-        processSpacedRepetition(quality);
-    }
-});
-
-async function processSpacedRepetition(quality) {
-    const card = studySession.cards[studySession.currentIndex];
-    
-    // Algoritmo SM-2 simplificado
-    let { easinessFactor, interval, repetitions } = card;
-
-    if (quality < 3) { // Si es "Otra vez" o "Difícil"
-        repetitions = 0; // Resetear repeticiones
-        interval = 1; // Próxima revisión en 1 día
-    } else {
-        repetitions += 1;
-        if (repetitions === 1) {
-            interval = 1;
-        } else if (repetitions === 2) {
-            interval = 6;
-        } else {
-            interval = Math.round(interval * easinessFactor);
-        }
-    }
-
-    // Actualizar factor de facilidad
-    easinessFactor = easinessFactor + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02));
-    if (easinessFactor < 1.3) easinessFactor = 1.3; // Mínimo EF
-    
-    // Calcular próxima fecha de revisión (en días)
-    // Para la demo, usamos intervalos cortos (minutos) para "Otra vez" y "Difícil"
-    const nextReviewDate = new Date();
-    if (quality === 1) {
-        nextReviewDate.setMinutes(nextReviewDate.getMinutes() + 1);
-    } else if (quality === 2) {
-        nextReviewDate.setMinutes(nextReviewDate.getMinutes() + 10);
-    } else {
-        nextReviewDate.setDate(nextReviewDate.getDate() + interval);
-    }
-    
-    // Actualizar tarjeta en Firestore
-    try {
-        const cardRef = doc(db, 'users', userId, 'decks', currentDeckId, 'flashcards', card.id);
-        await updateDoc(cardRef, {
-            easinessFactor: easinessFactor,
-            interval: interval,
-            repetitions: repetitions,
-            nextReviewDate: Timestamp.fromDate(nextReviewDate)
         });
-        
-        // Dar puntos por revisar
-        studySession.pointsEarned += 5;
-        
-        // Siguiente tarjeta
-        studySession.currentIndex += 1;
-        showNextStudyCard();
-        
-    } catch (error) {
-        console.error("Error actualizando tarjeta:", error);
     }
-}
 
-function endStudySession() {
-    stopTimer();
-    document.getElementById('study-flashcard').style.display = 'none';
-    document.getElementById('study-controls-show').style.display = 'none';
-    document.getElementById('study-controls-review').style.display = 'none';
-    
-    document.getElementById('study-points-earned').textContent = studySession.pointsEarned;
-    document.getElementById('study-complete').style.display = 'block';
-    
-    // Guardar estadísticas
-    const duration = Math.round((Date.now() - sessionStartTime) / 1000); // en segundos
-    updateUserStats({
-        points: increment(studySession.pointsEarned),
-        totalStudyTime: increment(duration)
-    });
-}
-
-document.getElementById('study-finish-btn').addEventListener('click', () => {
-    openDeckView(currentDeckId, deckTitle.textContent); // Recargar vista del mazo
-});
-document.getElementById('study-back-btn').addEventListener('click', () => {
-    if(confirm("¿Seguro que quieres terminar la sesión? El progreso no guardado se perderá.")) {
-        stopTimer();
-        openDeckView(currentDeckId, deckTitle.textContent);
+    // Listener borrar tarjeta (sin cambios)
+    if (cardList) {
+        cardList.addEventListener('click', (e) => {
+            const deleteBtn = e.target.closest('.delete-card-btn');
+            if (deleteBtn) {
+                const cardId = deleteBtn.dataset.cardId;
+                const deck = state.decks.find(d => d.id === state.currentDeckId);
+                if (deck) {
+                    deck.cards = deck.cards.filter(c => c.id !== cardId);
+                    renderManageView();
+                    saveStateToFirestore();
+                }
+            }
+        });
     }
-});
 
-// --- Lógica de Sesión de Quiz ---
+    // Listener borrar deck (revisado, usar nuestro modal en vez de confirm)
+    if (deleteDeckBtn) {
+        deleteDeckBtn.addEventListener('click', () => {
+            // Reemplazar confirm con un modal custom si es posible
+             showConfirmationModal("¿Eliminar este tema y todas sus tarjetas? Esta acción no se puede deshacer.", () => {
+                 if (!Array.isArray(state.decks)) state.decks = [];
+                state.decks = state.decks.filter(d => d.id !== state.currentDeckId);
+                navigate(VIEWS.DASHBOARD);
+                saveStateToFirestore();
+                 console.log("Deck eliminado:", state.currentDeckId);
+             });
+        });
+    }
 
-document.getElementById('start-quiz-btn').addEventListener('click', async () => {
-    if (!userId || !currentDeckId) return;
-    
-    showView('loading');
-    
-    // 1. Obtener TODAS las tarjetas del mazo
-    const cardsCol = collection(db, 'users', userId, 'decks', currentDeckId, 'flashcards');
-    
-    try {
-        const snapshot = await getDocs(cardsCol);
-        if (snapshot.empty) {
-            alert("No puedes empezar un quiz sin tarjetas en el mazo.");
-            showView('deck');
+
+    // --- Lógica de Sesión de Estudio (Study - CON BUG CORREGIDO) ---
+
+    function startStudySession() {
+        if (!Array.isArray(state.decks)) state.decks = [];
+        const deck = state.decks.find(d => d.id === state.currentDeckId);
+        if (!deck) return;
+
+        const today = getTodayString();
+        const cards = Array.isArray(deck.cards) ? deck.cards : [];
+        const cardsToReview = cards
+            .filter(c => c.nextReviewDate <= today) // Comparar strings YYYY-MM-DD
+            .sort(() => Math.random() - 0.5); // Barajar
+
+        state.studySession = {
+            cardsToReview: cardsToReview,
+            currentCardIndex: 0,
+            correctAnswers: 0,
+        };
+         console.log("Iniciando sesión de estudio con tarjetas:", cardsToReview);
+        logStudyActivity(); // Loguear actividad al empezar
+    }
+
+    // Renderizar vista de estudio (con corrección flashcard)
+    function renderStudyView() {
+        if (!state.studySession) state.studySession = defaultState.studySession;
+        const { cardsToReview, currentCardIndex } = state.studySession;
+        if (!Array.isArray(state.decks)) state.decks = [];
+        const deck = state.decks.find(d => d.id === state.currentDeckId);
+
+        if (!deck) {
+            navigate(VIEWS.DASHBOARD); // Si no hay deck, volver
             return;
         }
-        
-        let allCards = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        
-        // Mezclar tarjetas (Algoritmo Fisher-Yates)
-        for (let i = allCards.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [allCards[i], allCards[j]] = [allCards[j], allCards[i]];
+
+        if (studyDeckTitle) studyDeckTitle.textContent = deck.name;
+        const reviewList = Array.isArray(cardsToReview) ? cardsToReview : [];
+
+        // Fin de sesión
+        if (currentCardIndex >= reviewList.length) {
+            if (studyProgress) studyProgress.textContent = `Progreso: ${reviewList.length} / ${reviewList.length}`;
+            if (studyCard) {
+                studyCard.innerHTML = `
+                    <div class="text-center p-8">
+                        <h3 class="text-2xl font-bold text-white mb-4">¡Sesión completada!</h3>
+                        <p class="text-lg text-slate-300 mb-6">Repasaste ${reviewList.length} tarjetas.</p>
+                        <button id="finish-study-session-btn" class="bg-teal-600 hover:bg-teal-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors">
+                            Volver al Dashboard
+                        </button>
+                    </div>
+                `;
+                const finishBtn = document.getElementById('finish-study-session-btn');
+                if (finishBtn) {
+                    finishBtn.addEventListener('click', () => {
+                        navigate(VIEWS.DASHBOARD);
+                        saveStateToFirestore(); // Guardar cambios al final
+                    });
+                }
+            }
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+            return;
         }
-        
-        quizSession.cards = allCards.slice(0, 10); // Máximo 10 tarjetas por quiz
-        quizSession.currentIndex = 0;
-        quizSession.correctCount = 0;
-        quizSession.pointsEarned = 0;
-        
-        // 2. Iniciar UI de quiz
-        document.getElementById('quiz-card-total').textContent = quizSession.cards.length;
-        document.getElementById('quiz-results').style.display = 'none';
-        document.getElementById('quiz-active-content').style.display = 'block';
-        document.getElementById('quiz-feedback').style.display = 'none';
 
-        startTimer('quiz-timer');
-        showNextQuizCard();
-        showView('quiz');
-        
-    } catch (error) {
-        console.error("Error al iniciar quiz:", error);
-        showView('deck');
+        // Mostrar tarjeta actual
+        if (studyProgress) studyProgress.textContent = `Progreso: ${currentCardIndex + 1} / ${reviewList.length}`; // +1 para usuario
+        const currentCard = reviewList[currentCardIndex];
+
+        // Mostrar pregunta
+        if (studyQuestionImg) {
+            studyQuestionImg.src = currentCard.questionImg || '';
+            studyQuestionImg.classList.toggle('hidden', !currentCard.questionImg);
+            studyQuestionImg.onerror = () => { if(studyQuestionImg) studyQuestionImg.classList.add('hidden'); };
+        }
+        if (studyQuestionTextEl) studyQuestionTextEl.textContent = currentCard.question;
+
+        // Ocultar respuesta (y pre-cargarla)
+        if (studyAnswerImg) {
+            studyAnswerImg.src = ''; // Limpiar src
+            studyAnswerImg.classList.add('hidden');
+            studyAnswerImg.onerror = () => { if(studyAnswerImg) studyAnswerImg.classList.add('hidden'); };
+        }
+        if (studyAnswerTextEl) {
+             studyAnswerTextEl.textContent = currentCard.answer; // CORREGIDO: Cargar respuesta correcta
+            if (studyAnswerTextEl.parentElement) studyAnswerTextEl.parentElement.classList.add('hidden'); // Ocultar contenedor
+        }
+
+        // Controlar visibilidad de botones
+        if (studyDifficultyBtns) studyDifficultyBtns.classList.add('hidden');
+        if (showAnswerBtn) showAnswerBtn.classList.remove('hidden');
+        if (studyCard) studyCard.classList.remove('hidden');
+
+        if (typeof lucide !== 'undefined') lucide.createIcons();
     }
-});
 
-function showNextQuizCard() {
-    if (quizSession.currentIndex >= quizSession.cards.length) {
-        endQuizSession();
-        return;
+    // Listener "Mostrar Respuesta" (revisado)
+    if (showAnswerBtn) {
+        showAnswerBtn.addEventListener('click', () => {
+             if (!state.studySession) return;
+            const { cardsToReview, currentCardIndex } = state.studySession;
+             const reviewList = Array.isArray(cardsToReview) ? cardsToReview : [];
+            if (currentCardIndex >= reviewList.length) return; // Salir si no hay tarjeta actual
+
+            const currentCard = reviewList[currentCardIndex];
+
+            // Mostrar respuesta
+            if (studyAnswerImg) {
+                studyAnswerImg.src = currentCard.answerImg || '';
+                studyAnswerImg.classList.toggle('hidden', !currentCard.answerImg);
+            }
+             if (studyAnswerTextEl?.parentElement) {
+                // El texto ya está cargado, solo mostrar el contenedor
+                studyAnswerTextEl.parentElement.classList.remove('hidden');
+            }
+
+            // Cambiar botones
+            showAnswerBtn.classList.add('hidden');
+            if (studyDifficultyBtns) studyDifficultyBtns.classList.remove('hidden');
+        });
     }
-    
-    const card = quizSession.cards[quizSession.currentIndex];
-    document.getElementById('quiz-card-front').textContent = card.front;
-    document.getElementById('quiz-card-count').textContent = quizSession.currentIndex + 1;
-    
-    document.getElementById('quiz-active-content').style.display = 'block';
-    document.getElementById('quiz-feedback').style.display = 'none';
-    document.getElementById('quiz-answer-input').value = '';
-    document.getElementById('quiz-answer-input').focus();
-}
 
-document.getElementById('quiz-answer-form').addEventListener('submit', (e) => {
-    e.preventDefault();
-    const userAnswer = document.getElementById('quiz-answer-input').value.trim();
-    const card = quizSession.cards[quizSession.currentIndex];
-    const correctAnswer = card.back.trim();
-    
-    // Comparación simple (se puede mejorar con normalización)
-    const isCorrect = userAnswer.toLowerCase() === correctAnswer.toLowerCase();
-    
-    document.getElementById('feedback-user-answer').textContent = userAnswer;
-    document.getElementById('feedback-correct-answer').textContent = correctAnswer;
-    
-    if (isCorrect) {
-        document.getElementById('feedback-title').textContent = "¡Correcto!";
-        document.getElementById('feedback-title').className = "text-2xl font-bold mb-4 text-emerald-400";
-        quizSession.correctCount++;
-        quizSession.pointsEarned += 10;
-    } else {
-        document.getElementById('feedback-title').textContent = "Incorrecto";
-        document.getElementById('feedback-title').className = "text-2xl font-bold mb-4 text-red-400";
+    // Listener botones dificultad (revisado, asegurar que deck y card existen)
+     if (studyDifficultyBtns) {
+        studyDifficultyBtns.addEventListener('click', (e) => {
+            const difficulty = e.target.closest('button')?.dataset.difficulty;
+            if (!difficulty) return;
+
+            if (!state.studySession) return;
+            const { cardsToReview, currentCardIndex } = state.studySession;
+            const reviewList = Array.isArray(cardsToReview) ? cardsToReview : [];
+            if (currentCardIndex >= reviewList.length) return;
+
+            const card = reviewList[currentCardIndex];
+
+            let { interval = 0, easeFactor = 2.5 } = card; // Usar defaults si no existen
+
+            let nextInterval;
+            let newEaseFactor = easeFactor;
+
+            if (difficulty === 'easy') {
+                nextInterval = getNextInterval(interval, 'easy');
+                newEaseFactor = Math.min(3.0, newEaseFactor + 0.15);
+                 if (isNaN(state.points)) state.points = 0; state.points += 3;
+            } else if (difficulty === 'good') {
+                nextInterval = getNextInterval(interval, 'good');
+                 if (isNaN(state.points)) state.points = 0; state.points += 2;
+            } else { // 'hard'
+                nextInterval = 0; // Reiniciar
+                newEaseFactor = Math.max(1.3, newEaseFactor - 0.2);
+                 if (isNaN(state.points)) state.points = 0; state.points += 1;
+            }
+
+            // Calcular nueva fecha de revisión
+            const nextReviewDate = new Date(getTodayString() + 'T00:00:00Z'); // Usar Z para UTC
+             // Asegurarse que nextInterval es un número finito
+            const daysToAdd = Number.isFinite(nextInterval) ? Math.round(nextInterval) : 1;
+            nextReviewDate.setDate(nextReviewDate.getDate() + daysToAdd);
+
+             // Encontrar y actualizar la tarjeta original en el estado global 'state.decks'
+            const deck = state.decks?.find(d => d.id === state.currentDeckId);
+            const cardInDeck = deck?.cards?.find(c => c.id === card.id);
+            if (cardInDeck) {
+                cardInDeck.interval = nextInterval;
+                cardInDeck.easeFactor = newEaseFactor;
+                cardInDeck.nextReviewDate = nextReviewDate.toISOString().split('T')[0]; // Guardar como YYYY-MM-DD
+                 console.log("Tarjeta actualizada:", cardInDeck);
+            } else {
+                 console.warn("No se encontró la tarjeta original en el deck para actualizar:", card.id);
+            }
+
+            // Avanzar a la siguiente tarjeta en la sesión actual
+            state.studySession.currentCardIndex++;
+            renderStudyView(); // Mostrar siguiente o fin
+             // Guardar cambios después de cada calificación
+             saveStateToFirestore();
+        });
     }
-    
-    document.getElementById('quiz-active-content').style.display = 'none';
-    document.getElementById('quiz-feedback').style.display = 'block';
-});
 
-document.getElementById('quiz-next-btn').addEventListener('click', () => {
-    quizSession.currentIndex++;
-    showNextQuizCard();
-});
-
-function endQuizSession() {
-    stopTimer();
-    document.getElementById('quiz-active-content').style.display = 'none';
-    document.getElementById('quiz-feedback').style.display = 'none';
-    
-    const total = quizSession.cards.length;
-    const correct = quizSession.correctCount;
-    const percentage = total > 0 ? Math.round((correct / total) * 100) : 0;
-    
-    document.getElementById('quiz-score-percent').textContent = percentage;
-    document.getElementById('quiz-score-correct').textContent = correct;
-    document.getElementById('quiz-score-total').textContent = total;
-    document.getElementById('quiz-points-earned').textContent = quizSession.pointsEarned;
-    
-    document.getElementById('quiz-results').style.display = 'block';
-    
-    // Guardar estadísticas
-    const duration = Math.round((Date.now() - sessionStartTime) / 1000); // en segundos
-    updateUserStats({
-        points: increment(quizSession.pointsEarned),
-        totalStudyTime: increment(duration)
-    });
-}
-
-document.getElementById('quiz-finish-btn').addEventListener('click', () => {
-    openDeckView(currentDeckId, deckTitle.textContent); // Recargar vista del mazo
-});
-document.getElementById('quiz-back-btn').addEventListener('click', () => {
-    if(confirm("¿Seguro que quieres salir del quiz? Tu puntuación no se guardará.")) {
-        stopTimer();
-        openDeckView(currentDeckId, deckTitle.textContent);
+    // Función SM-2 simplificada (sin cambios)
+    function getNextInterval(lastInterval, difficulty) {
+        if (difficulty === 'hard') return Math.max(1, Math.floor(lastInterval / 2));
+        if (lastInterval === 0) return (difficulty === 'easy') ? 4 : 1;
+        if (lastInterval === 1) return (difficulty === 'easy') ? 7 : 3;
+        let next = lastInterval * (difficulty === 'easy' ? 2.5 : 2.0);
+        return Math.min(Math.round(next), 60);
     }
-});
 
-// --- Funciones de Utilidad ---
 
-// Actualizar estadísticas del usuario
-async function updateUserStats(statsUpdate) {
-    if (!userId) return;
-    const userRef = doc(db, 'users', userId);
-    try {
-        await updateDoc(userRef, statsUpdate);
-    } catch (error) {
-        console.error("Error actualizando estadísticas:", error);
+    // --- Lógica de Quiz (revisada para seguridad) ---
+    let quizState = { questions: [], currentQuestionIndex: 0, score: 0, answered: false };
+
+    function startQuiz() {
+        if (!Array.isArray(state.decks)) state.decks = [];
+        const deck = state.decks.find(d => d.id === state.currentDeckId);
+        const cards = Array.isArray(deck?.cards) ? deck.cards : [];
+        if (!deck || cards.length < 4) {
+             showNotification("Necesitas al menos 4 tarjetas para un quiz.");
+            return;
+        }
+
+        logStudyActivity(); // Loguear actividad
+
+        const shuffledCards = [...cards].sort(() => Math.random() - 0.5);
+        quizState.questions = shuffledCards.map(card => generateQuizQuestion(card, cards));
+        quizState.currentQuestionIndex = 0;
+        quizState.score = 0;
+        quizState.answered = false;
+
+        navigate(VIEWS.QUIZ); // Navegar a la vista
+        // renderQuizView(); // render() se llamará automáticamente
     }
-}
 
-// Timer de sesión
-function startTimer(elementId) {
-    stopTimer(); // Detener cualquier timer anterior
-    sessionStartTime = Date.now();
-    const timerEl = document.getElementById(elementId);
-    
-    activeTimerInterval = setInterval(() => {
-        const elapsedSeconds = Math.floor((Date.now() - sessionStartTime) / 1000);
-        const minutes = Math.floor(elapsedSeconds / 60);
-        const seconds = elapsedSeconds % 60;
-        timerEl.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-    }, 1000);
-}
+    // Generar pregunta de quiz (revisado placeholder)
+    function generateQuizQuestion(correctCard, allCards) {
+        let options = [correctCard.answer];
+        const incorrectCards = allCards.filter(c => c.id !== correctCard.id);
+        const shuffledIncorrect = [...incorrectCards].sort(() => Math.random() - 0.5);
 
-function stopTimer() {
-    if (activeTimerInterval) {
-        clearInterval(activeTimerInterval);
-        activeTimerInterval = null;
+        for (let i = 0; options.length < 4 && i < shuffledIncorrect.length; i++) {
+             if (!options.includes(shuffledIncorrect[i].answer)) {
+                 options.push(shuffledIncorrect[i].answer);
+             }
+        }
+         // Rellenar si faltan opciones
+        let fillerIndex = 1;
+         while (options.length < 4) {
+             const filler = `Opción ${fillerIndex++}`;
+             if (!options.includes(filler)) options.push(filler);
+             else options.push(Math.random().toString(16).substring(2, 8)); // fallback aleatorio
+         }
+
+        options.sort(() => Math.random() - 0.5); // Barajar
+
+        return { question: correctCard.question, options, correctAnswer: correctCard.answer };
     }
-}
 
-// Función simple para escapar HTML
-function escapeHTML(str) {
-    return str.replace(/[&<>"']/g, function(m) {
-        return {
-            '&': '&amp;',
-            '<': '&lt;',
-            '>': '&gt;',
-            '"': '&quot;',
-            "'": '&#039;'
-        }[m];
-    });
-}
+    // Renderizar vista de quiz (revisado)
+    function renderQuizView() {
+        if (!Array.isArray(state.decks)) state.decks = [];
+        const deck = state.decks.find(d => d.id === state.currentDeckId);
+        if (!deck) { navigate(VIEWS.DASHBOARD); return; }
 
-// --- Inicio de la App ---
-showView('loading'); // Empezar con la vista de carga
-// onAuthStateChanged se activará automáticamente
+        if (quizDeckTitle) quizDeckTitle.textContent = `Quiz: ${deck.name}`;
+        if (quizFeedback) quizFeedback.classList.add('hidden');
+        if (nextQuizQuestionBtn) nextQuizQuestionBtn.classList.add('hidden');
+
+        const { questions, currentQuestionIndex } = quizState;
+
+        // Fin del quiz
+        if (currentQuestionIndex >= questions.length) {
+            const scorePercent = (questions.length > 0) ? Math.round((quizState.score / questions.length) * 100) : 0;
+            if (quizQuestionText) quizQuestionText.textContent = '¡Quiz completado!';
+            if (quizOptionsList) {
+                quizOptionsList.innerHTML = `
+                    <p class="text-xl text-center text-slate-300">
+                        Puntuación: ${quizState.score} / ${questions.length} (${scorePercent}%)
+                    </p>
+                    <button id="finish-quiz-btn" class="w-full mt-6 bg-teal-600 hover:bg-teal-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors">
+                        Volver
+                    </button>`;
+                document.getElementById('finish-quiz-btn')?.addEventListener('click', () => {
+                    navigate(VIEWS.DASHBOARD);
+                    saveStateToFirestore(); // Guardar puntos acumulados
+                });
+            }
+             if (typeof lucide !== 'undefined') lucide.createIcons();
+            return;
+        }
+
+        // Mostrar pregunta actual
+        if (quizProgress) quizProgress.textContent = `Pregunta: ${currentQuestionIndex + 1} / ${questions.length}`;
+        const question = questions[currentQuestionIndex];
+        if (quizQuestionText) quizQuestionText.textContent = question.question;
+
+        if (quizOptionsList) {
+            quizOptionsList.innerHTML = ''; // Limpiar
+            question.options.forEach(option => {
+                const optionEl = document.createElement('button');
+                optionEl.className = 'quiz-option w-full bg-slate-700 hover:bg-slate-600 text-slate-200 text-left p-4 rounded-lg transition-colors';
+                optionEl.textContent = option;
+                quizOptionsList.appendChild(optionEl);
+            });
+        }
+
+        quizState.answered = false; // Permitir nueva respuesta
+         if (typeof lucide !== 'undefined') lucide.createIcons();
+    }
+
+    // Listener opciones quiz (revisado)
+    if (quizOptionsList) {
+        quizOptionsList.addEventListener('click', (e) => {
+            const selectedOption = e.target.closest('.quiz-option');
+            if (!selectedOption || quizState.answered) return;
+
+            quizState.answered = true;
+            const answer = selectedOption.textContent;
+            const question = quizState.questions[quizState.currentQuestionIndex];
+
+            // Deshabilitar y colorear opciones
+            quizOptionsList.querySelectorAll('.quiz-option').forEach(btn => {
+                btn.disabled = true;
+                btn.classList.add('opacity-70'); // Atenuar todas
+                if (btn.textContent === question.correctAnswer) {
+                     btn.classList.remove('bg-slate-700', 'hover:bg-slate-600', 'opacity-70');
+                     btn.classList.add('bg-green-700'); // Verde correcta
+                } else if (btn === selectedOption) { // Si es la seleccionada e incorrecta
+                     btn.classList.remove('bg-slate-700', 'hover:bg-slate-600', 'opacity-70');
+                     btn.classList.add('bg-red-700'); // Rojo incorrecta
+                }
+            });
+
+            // Dar feedback y puntos
+            if (answer === question.correctAnswer) {
+                if (quizFeedback) {
+                    quizFeedback.textContent = '¡Correcto! +10 puntos';
+                    quizFeedback.className = 'p-3 rounded-lg bg-green-900 text-green-200 mt-4';
+                }
+                quizState.score++;
+                 if (isNaN(state.points)) state.points = 0; state.points += 10;
+                 // Actualizar puntos en header al instante
+                 const pointsDisplay = document.getElementById('points');
+                 if (pointsDisplay) pointsDisplay.textContent = `${state.points} pts`;
+
+            } else {
+                 if (quizFeedback) {
+                    quizFeedback.textContent = `Incorrecto. Correcta: ${question.correctAnswer}`;
+                    quizFeedback.className = 'p-3 rounded-lg bg-red-900 text-red-200 mt-4';
+                }
+            }
+
+            if (quizFeedback) quizFeedback.classList.remove('hidden');
+            if (nextQuizQuestionBtn) nextQuizQuestionBtn.classList.remove('hidden');
+            // NO guardar aquí, se guarda al final del quiz
+        });
+    }
+
+    // Listener botón siguiente quiz (sin cambios)
+    if (nextQuizQuestionBtn) {
+        nextQuizQuestionBtn.addEventListener('click', () => {
+            quizState.currentQuestionIndex++;
+            renderQuizView();
+        });
+    }
+
+
+    // --- Lógica del Pomodoro (sin cambios) ---
+    function updatePomodoroUI() {
+        if (!pomodoroTimerEl) return;
+        const pom = state.pomodoro || defaultState.pomodoro;
+        const timeLeft = pom.timeLeft ?? (25 * 60);
+        const minutes = Math.floor(timeLeft / 60);
+        const seconds = timeLeft % 60;
+        pomodoroTimerEl.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        if (startPomodoroBtn) startPomodoroBtn.textContent = pom.isRunning ? 'Pausar' : 'Iniciar';
+        // Cambio de color de fondo
+        if (pom.isBreak) { document.body.classList.add('bg-teal-900'); document.body.classList.remove('bg-slate-900'); }
+        else { document.body.classList.remove('bg-teal-900'); document.body.classList.add('bg-slate-900'); }
+    }
+    function startPomodoro() {
+        if (!state.pomodoro) state.pomodoro = { ...defaultState.pomodoro };
+        if (state.pomodoro.isRunning) { clearInterval(state.pomodoro.timer); state.pomodoro.isRunning = false; }
+        else {
+            state.pomodoro.isRunning = true;
+            state.pomodoro.endTime = state.pomodoro.endTime && state.pomodoro.endTime > Date.now() ? state.pomodoro.endTime : Date.now() + (state.pomodoro.timeLeft * 1000);
+            if (state.pomodoro.endTime > Date.now()) {
+                state.pomodoro.timeLeft = Math.round((state.pomodoro.endTime - Date.now()) / 1000);
+            }
+            state.pomodoro.timer = setInterval(() => {
+                const timeLeftMs = (state.pomodoro.endTime || 0) - Date.now();
+                if (timeLeftMs <= 0) handlePomodoroFinish();
+                else state.pomodoro.timeLeft = Math.round(timeLeftMs / 1000);
+                updatePomodoroUI();
+            }, 1000);
+        }
+        updatePomodoroUI();
+        saveStateToFirestore();
+    }
+    function handlePomodoroFinish() {
+        clearInterval(state.pomodoro.timer);
+        if (!state.pomodoro) state.pomodoro = { ...defaultState.pomodoro };
+        state.pomodoro.isRunning = false; state.pomodoro.endTime = null;
+        playPomodoroSound(state.pomodoro.isBreak);
+        if (state.pomodoro.isBreak) { state.pomodoro.isBreak = false; state.pomodoro.timeLeft = 25 * 60; showNotification("¡Descanso terminado!"); }
+        else { state.pomodoro.isBreak = true; state.pomodoro.timeLeft = 5 * 60; if (isNaN(state.points)) state.points = 0; state.points += 25; if (isNaN(state.studyTimeMinutes)) state.studyTimeMinutes = 0; state.studyTimeMinutes += 25; logStudyActivity(); showNotification("¡Pomodoro! +25 pts. Descanso..."); }
+        updatePomodoroUI();
+        saveStateToFirestore();
+    }
+    function resetPomodoro() {
+        clearInterval(state.pomodoro?.timer);
+        state.pomodoro = { ...defaultState.pomodoro }; // Reset completo
+        updatePomodoroUI();
+        saveStateToFirestore();
+    }
+    function checkRunningPomodoro() {
+        if (state.pomodoro?.endTime && state.pomodoro.endTime > Date.now()) { state.pomodoro.timeLeft = Math.round((state.pomodoro.endTime - Date.now()) / 1000); startPomodoro(); }
+        else if (state.pomodoro?.endTime && state.pomodoro.endTime <= Date.now()) { handlePomodoroFinish(); }
+    }
+    if (startPomodoroBtn) startPomodoroBtn.addEventListener('click', startPomodoro);
+    if (resetPomodoroBtn) resetPomodoroBtn.addEventListener('click', resetPomodoro);
+
+    // --- Utilidades ---
+    function getTodayString() { return new Date().toISOString().split('T')[0]; }
+    function showNotification(message) { /* ... sin cambios ... */ }
+    let audioCtx; function playPomodoroSound(isBreak) { /* ... sin cambios ... */ }
+     // Función para mostrar modal de confirmación (simple)
+    function showConfirmationModal(message, onConfirm) {
+        // TODO: Implementar un modal HTML en lugar de window.confirm
+        if (window.confirm(message)) {
+            onConfirm();
+        }
+    }
+
+
+    // Render inicial al cargar la página (se llamará después de onAuthStateChanged)
+    // render(); // No llamar aquí, onAuthStateChanged lo hará
+
+}); // Fin DOMContentLoaded
