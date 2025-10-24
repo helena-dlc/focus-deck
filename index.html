@@ -1,535 +1,314 @@
 <!DOCTYPE html>
-<html lang="es" class="dark">
+<html lang="es" class="h-full">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Focus Deck - App de Estudio Gamificada</title>
+    <title>FocusDeck - App de Estudio</title>
+    <!-- Carga de Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        primary: {
-                            50: '#f0f9ff',
-                            500: '#3b82f6',
-                            600: '#2563eb',
-                            700: '#1d4ed8'
-                        },
-                        dark: {
-                            100: '#1f2937',
-                            200: '#374151',
-                            300: '#4b5563',
-                            800: '#1f2937',
-                            900: '#111827'
-                        }
-                    }
-                }
-            }
-        }
-    </script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css">
-</head>
-<body class="bg-gray-900 text-white min-h-screen font-sans">
+    <!-- Carga de la fuente Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
     
-    <!-- Login Screen -->
-    <div id="loginScreen" class="fixed inset-0 bg-gradient-to-br from-gray-900 via-blue-900 to-purple-900 flex items-center justify-center">
-        <div class="text-center max-w-md p-8 rounded-2xl bg-gray-800/50 backdrop-blur-sm border border-gray-700 animate-fade-in">
-            <div class="mb-8">
-                <div class="w-20 h-20 mx-auto mb-4 bg-gradient-to-r from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center">
-                    <i class="fas fa-brain text-3xl text-white"></i>
-                </div>
-                <h1 class="text-4xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">Focus Deck</h1>
-                <p class="text-gray-400 mt-2">Tu app de estudio gamificada</p>
-            </div>
-            
-            <button id="googleSignIn" class="w-full bg-white hover:bg-gray-100 text-gray-900 font-semibold py-3 px-6 rounded-xl transition-all duration-300 flex items-center justify-center gap-3 shadow-lg hover:shadow-xl">
-                <svg class="w-5 h-5" viewBox="0 0 24 24">
-                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-                </svg>
-                Continuar con Google
-            </button>
+    <!-- Enlace a la hoja de estilos externa -->
+    <link rel="stylesheet" href="assets/style.css">
+</head>
+<body class="bg-gray-900 text-gray-100 h-full flex flex-col antialiased">
+
+    <!-- Contenedor principal de la aplicación -->
+    <div id="app-container" class="flex-grow flex flex-col">
+
+        <!-- Vista de Carga (Spinner) -->
+        <div id="loading-view" class="view flex-grow flex items-center justify-center">
+            <svg class="animate-spin -ml-1 mr-3 h-10 w-10 text-emerald-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
         </div>
-    </div>
 
-    <!-- Main App -->
-    <div id="mainApp" class="hidden">
-        <!-- Header -->
-        <header class="bg-gray-800/90 backdrop-blur-sm border-b border-gray-700 sticky top-0 z-50">
-            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div class="flex justify-between items-center py-4">
-                    <div class="flex items-center gap-4">
-                        <div class="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
-                            <i class="fas fa-brain text-white"></i>
-                        </div>
-                        <h1 class="text-2xl font-bold">Focus Deck</h1>
-                    </div>
-                    
-                    <div class="flex items-center gap-4">
-                        <div class="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-yellow-600/20 to-yellow-500/20 rounded-full border border-yellow-500/30">
-                            <i class="fas fa-star text-yellow-500"></i>
-                            <span id="userPoints" class="font-semibold text-yellow-400">0</span>
+        <!-- Vista de Login -->
+        <div id="login-view" class="view flex-grow flex items-center justify-center p-6">
+            <div class="bg-gray-800 p-8 md:p-12 rounded-2xl shadow-2xl text-center max-w-md w-full">
+                <!-- Icono de la App -->
+                <div class="w-16 h-16 bg-emerald-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                    </svg>
+                </div>
+                <h1 class="text-3xl font-bold text-white mb-2">FocusDeck</h1>
+                <p class="text-gray-400 mb-8">Tu app de estudio gamificada.</p>
+                <button id="login-btn" class="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition-all duration-300 ease-in-out flex items-center justify-center space-x-2">
+                    <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+                        <path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8c-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4C12.955 4 4 12.955 4 24s8.955 20 20 20s20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"/>
+                        <path fill="#FF3D00" d="M6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4C16.318 4 9.656 8.337 6.306 14.691z"/>
+                        <path fill="#4CAF50" d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238C29.211 35.091 26.715 36 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z"/>
+                        <path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303c-0.792 2.237-2.231 4.166-4.087 5.571l6.19 5.238C41.310 34.793 44 28.537 44 24c0-1.341-.138-2.65-.389-3.917z"/>
+                    </svg>
+                    <span>Iniciar sesión con Google</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Vista Principal de la App (Dashboard, etc.) -->
+        <div id="app-view" class="view flex-grow flex flex-col">
+            <!-- Header de la App -->
+            <header class="bg-gray-800 shadow-md sticky top-0 z-10">
+                <nav class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div class="flex items-center justify-between h-16">
+                        <!-- Logo/Nombre -->
+                        <div class="flex items-center space-x-2">
+                            <div class="w-8 h-8 bg-emerald-500 rounded-full flex items-center justify-center shadow-lg">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                                </svg>
+                            </div>
+                            <span class="font-bold text-xl text-white">FocusDeck</span>
                         </div>
                         
-                        <div class="relative">
-                            <button id="userProfileBtn" class="flex items-center gap-3 px-4 py-2 rounded-xl hover:bg-gray-700 transition-colors">
-                                <img id="userPhoto" src="" alt="Perfil" class="w-8 h-8 rounded-full">
-                                <span id="userName">Usuario</span>
-                                <i class="fas fa-chevron-down text-sm"></i>
+                        <!-- Perfil de Usuario y Logout -->
+                        <div class="flex items-center space-x-4">
+                            <!-- Puntos -->
+                            <div class="flex items-center space-x-1 bg-gray-700 px-3 py-1 rounded-full">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                                </svg>
+                                <span id="stats-points" class="font-bold text-sm text-white">0</span>
+                            </div>
+                            <img id="user-photo" class="h-9 w-9 rounded-full" src="https://placehold.co/40x40/4a5568/a0aec0?text=User" alt="User Photo">
+                            <span id="user-name" class="hidden sm:block text-sm font-medium text-gray-300">Cargando...</span>
+                            <button id="logout-btn" title="Cerrar sesión" class="text-gray-400 hover:text-white transition-colors">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                                </svg>
                             </button>
-                            
-                            <div id="profileDropdown" class="absolute right-0 top-full mt-2 w-48 bg-gray-800 border border-gray-700 rounded-xl py-2 hidden">
-                                <button id="logoutBtn" class="w-full text-left px-4 py-2 hover:bg-gray-700 flex items-center gap-2">
-                                    <i class="fas fa-sign-out-alt"></i>
-                                    Cerrar Sesión
-                                </button>
+                        </div>
+                    </div>
+                </nav>
+            </header>
+
+            <!-- Contenido Principal -->
+            <main class="flex-grow">
+                
+                <!-- Vista: Dashboard -->
+                <div id="dashboard-view" class="view max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+                    <!-- Tablero de Estadísticas -->
+                    <section id="stats-board" class="mb-8">
+                        <h2 class="text-2xl font-bold text-white mb-4">Tu Progreso</h2>
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <!-- Racha -->
+                            <div class="bg-gray-800 p-6 rounded-xl shadow-lg flex items-center space-x-4">
+                                <div class="p-3 rounded-full bg-red-500 text-white">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M17.657 18.657A8 8 0 016.343 7.343m11.314 11.314a8 8 0 00-11.314-11.314m11.314 11.314L6.343 7.343" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <span class="text-sm text-gray-400">Racha de Días</span>
+                                    <p id="stats-streak" class="text-2xl font-bold text-white">0 Días</p>
+                                </div>
+                            </div>
+                            <!-- Horas Estudiadas -->
+                            <div class="bg-gray-800 p-6 rounded-xl shadow-lg flex items-center space-x-4">
+                                <div class="p-3 rounded-full bg-blue-500 text-white">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <span class="text-sm text-gray-400">Tiempo Total</span>
+                                    <p id="stats-time" class="text-2xl font-bold text-white">0h 0m</p>
+                                </div>
+                            </div>
+                            <!-- Puntos Totales (repetido, pero usa el del header) -->
+                            <div class="bg-gray-800 p-6 rounded-xl shadow-lg flex items-center space-x-4">
+                                <div class="p-3 rounded-full bg-yellow-500 text-white">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <span class="text-sm text-gray-400">Puntos Totales</span>
+                                    <p id="stats-points-dash" class="text-2xl font-bold text-white">0 Puntos</p>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                </div>
-            </div>
-        </header>
-
-        <!-- Navigation -->
-        <nav class="bg-gray-800/50 border-b border-gray-700">
-            <div class="max-w-7xl mx-auto px-4">
-                <div class="flex overflow-x-auto">
-                    <button class="nav-btn active" data-view="dashboard">
-                        <i class="fas fa-home"></i>
-                        Dashboard
-                    </button>
-                    <button class="nav-btn" data-view="flashcards">
-                        <i class="fas fa-cards-blank"></i>
-                        Flashcards
-                    </button>
-                    <button class="nav-btn" data-view="quiz">
-                        <i class="fas fa-brain"></i>
-                        Quiz
-                    </button>
-                    <button class="nav-btn" data-view="tasks">
-                        <i class="fas fa-list-check"></i>
-                        Tareas
-                    </button>
-                    <button class="nav-btn" data-view="stats">
-                        <i class="fas fa-chart-line"></i>
-                        Estadísticas
-                    </button>
-                </div>
-            </div>
-        </nav>
-
-        <!-- Main Content -->
-        <main class="max-w-7xl mx-auto px-4 py-6">
-            
-            <!-- Dashboard View -->
-            <div id="dashboardView" class="view active">
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+                    </section>
                     
-                    <!-- Pomodoro Timer -->
-                    <div class="lg:col-span-2 bg-gray-800 rounded-2xl p-6 border border-gray-700">
-                        <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
-                            <i class="fas fa-clock text-red-500"></i>
-                            Temporizador Pomodoro
-                        </h2>
-                        
-                        <div class="text-center">
-                            <div id="timerDisplay" class="text-8xl font-mono font-bold mb-8 timer-display">25:00</div>
-                            
-                            <div class="flex justify-center gap-4 mb-6">
-                                <button id="startPauseBtn" class="px-8 py-4 bg-green-600 hover:bg-green-700 rounded-xl font-semibold transition-all duration-300 flex items-center gap-2">
-                                    <i class="fas fa-play"></i>
-                                    Iniciar
-                                </button>
-                                <button id="resetBtn" class="px-8 py-4 bg-gray-600 hover:bg-gray-700 rounded-xl font-semibold transition-all duration-300 flex items-center gap-2">
-                                    <i class="fas fa-refresh"></i>
-                                    Resetear
-                                </button>
-                            </div>
-                            
-                            <div id="timerStatus" class="text-gray-400">Listo para comenzar</div>
+                    <!-- Mis Mazos de Estudio -->
+                    <section>
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-2xl font-bold text-white">Mis Mazos</h2>
+                            <form id="add-deck-form" class="flex space-x-2">
+                                <input id="deck-name-input" type="text" placeholder="Nombre del nuevo mazo" class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-emerald-500 focus:border-emerald-500 block w-full p-2.5" required>
+                                <button type="submit" class="bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-all">Crear</button>
+                            </form>
+                        </div>
+                        <div id="deck-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <!-- Los mazos se insertarán aquí dinámicamente -->
+                            <p id="no-decks-msg" class="text-gray-400">Aún no has creado ningún mazo. ¡Crea uno para empezar!</p>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- Vista: Detalle del Mazo -->
+                <div id="deck-view" class="view max-w-4xl mx-auto p-4 sm:p-6 lg:p-8">
+                    <button id="back-to-dash-btn" class="mb-4 text-emerald-400 hover:text-emerald-300 font-medium flex items-center space-x-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M11 17l-5-5m0 0l5-5m-5 5h12" />
+                        </svg>
+                        <span>Volver al Dashboard</span>
+                    </button>
+                    
+                    <div class="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
+                        <h2 id="deck-title" class="text-3xl font-bold text-white">Nombre del Mazo</h2>
+                        <div class="flex space-x-2">
+                            <button id="start-study-btn" class="w-1/2 sm:w-auto bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 px-5 rounded-lg shadow-lg flex items-center justify-center space-x-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                                </svg>
+                                <span>Estudiar (<span id="study-count">0</span>)</span>
+                            </button>
+                            <button id="start-quiz-btn" class="w-1/2 sm:w-auto bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-5 rounded-lg shadow-lg flex items-center justify-center space-x-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                                </svg>
+                                <span>Quiz (<span id="quiz-count">0</span>)</span>
+                            </button>
+                            <button id="delete-deck-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold p-2.5 rounded-lg shadow-lg">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                            </button>
                         </div>
                     </div>
                     
-                    <!-- Quick Stats -->
-                    <div class="space-y-6">
-                        <div class="bg-gray-800 rounded-2xl p-6 border border-gray-700">
-                            <h3 class="font-semibold mb-4 flex items-center gap-2">
-                                <i class="fas fa-fire text-orange-500"></i>
-                                Racha Actual
-                            </h3>
-                            <div class="text-3xl font-bold text-orange-400" id="currentStreak">0</div>
-                            <div class="text-sm text-gray-400">días</div>
+                    <!-- Añadir Flashcard -->
+                    <form id="add-card-form" class="bg-gray-800 p-4 rounded-lg shadow-lg mb-6">
+                        <h3 class="text-lg font-semibold mb-3 text-white">Añadir nueva tarjeta</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <textarea id="card-front-input" placeholder="Frente (Pregunta)" class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-emerald-500 focus:border-emerald-500 block w-full p-2.5" rows="3" required></textarea>
+                            <textarea id="card-back-input" placeholder="Reverso (Respuesta)" class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-emerald-500 focus:border-emerald-500 block w-full p-2.5" rows="3" required></textarea>
                         </div>
-                        
-                        <div class="bg-gray-800 rounded-2xl p-6 border border-gray-700">
-                            <h3 class="font-semibold mb-4 flex items-center gap-2">
-                                <i class="fas fa-graduation-cap text-blue-500"></i>
-                                Progreso Global
-                            </h3>
-                            <div class="text-3xl font-bold text-blue-400" id="globalProgress">0</div>
-                            <div class="text-sm text-gray-400">% dominado</div>
-                        </div>
+                        <button type="submit" class="mt-4 w-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-all">Guardar Tarjeta</button>
+                    </form>
+
+                    <!-- Lista de Tarjetas -->
+                    <h3 class="text-lg font-semibold mb-3 text-white">Tarjetas en este mazo</h3>
+                    <div id="card-list" class="bg-gray-800 rounded-lg shadow-lg overflow-hidden">
+                        <!-- Las tarjetas se insertarán aquí -->
+                        <p id="no-cards-msg" class="text-gray-400 p-4">No hay tarjetas en este mazo. ¡Añade una!</p>
                     </div>
                 </div>
 
-                <!-- Recent Activity & Quick Actions -->
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    
-                    <!-- Tasks Preview -->
-                    <div class="bg-gray-800 rounded-2xl p-6 border border-gray-700">
-                        <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
-                            <i class="fas fa-list-check text-purple-500"></i>
-                            Tareas Pendientes
-                        </h3>
-                        <div id="tasksPreview" class="space-y-3">
-                            <!-- Tasks will be loaded here -->
-                        </div>
-                        <button class="w-full mt-4 py-2 text-purple-400 hover:text-purple-300 transition-colors" onclick="switchView('tasks')">
-                            Ver todas las tareas →
+                <!-- Vista: Sesión de Estudio (Flashcards) -->
+                <div id="study-view" class="view max-w-3xl mx-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center">
+                    <div class="w-full flex justify-between items-center mb-4">
+                        <button id="study-back-btn" class="text-emerald-400 hover:text-emerald-300 font-medium flex items-center space-x-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M11 17l-5-5m0 0l5-5m-5 5h12" />
+                            </svg>
+                            <span>Terminar</span>
                         </button>
+                        <div class="text-sm text-gray-400">
+                            Tiempo: <span id="study-timer">0:00</span>
+                        </div>
+                        <div class="text-lg font-bold text-white">
+                            <span id="study-card-count">1</span> / <span id="study-card-total">10</span>
+                        </div>
+                    </div>
+
+                    <!-- Flashcard -->
+                    <div id="study-flashcard" class="flashcard w-full h-80 perspective[1000px] mb-6">
+                        <div class="flashcard-inner relative w-full h-full">
+                            <!-- Frente -->
+                            <div class="flashcard-front absolute w-full h-full bg-gray-800 rounded-xl shadow-2xl p-6 flex items-center justify-center">
+                                <p id="study-card-front" class="text-2xl text-center font-medium text-white">Cargando pregunta...</p>
+                            </div>
+                            <!-- Reverso -->
+                            <div class="flashcard-back absolute w-full h-full bg-gray-700 rounded-xl shadow-2xl p-6 flex flex-col items-center justify-center">
+                                <p id="study-card-back" class="text-xl text-center font-medium text-gray-200 mb-4">Cargando respuesta...</p>
+                                <hr class="w-1/2 border-gray-600 mb-4">
+                                <p class="text-sm text-gray-400">¿Qué tal te ha resultado?</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Controles -->
+                    <div id="study-controls-show" class="w-full">
+                        <button id="show-answer-btn" class="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition-all">Mostrar Respuesta</button>
+                    </div>
+                    <div id="study-controls-review" class="w-full grid grid-cols-2 md:grid-cols-4 gap-3" style="display: none;">
+                        <button data-quality="1" class="review-btn bg-red-600 hover:bg-red-700 text-white font-semibold py-3 px-4 rounded-lg shadow-md transition-all">Otra vez (1m)</button>
+                        <button data-quality="2" class="review-btn bg-orange-500 hover:bg-orange-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md transition-all">Difícil (10m)</button>
+                        <button data-quality="3" class="review-btn bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md transition-all">Bien (1d)</button>
+                        <button data-quality="4" class="review-btn bg-green-500 hover:bg-green-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md transition-all">Fácil (4d)</button>
                     </div>
                     
-                    <!-- Flashcards Preview -->
-                    <div class="bg-gray-800 rounded-2xl p-6 border border-gray-700">
-                        <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
-                            <i class="fas fa-cards-blank text-green-500"></i>
-                            Temas de Estudio
-                        </h3>
-                        <div id="decksPreview" class="space-y-3">
-                            <!-- Decks will be loaded here -->
-                        </div>
-                        <button class="w-full mt-4 py-2 text-green-400 hover:text-green-300 transition-colors" onclick="switchView('flashcards')">
-                            Gestionar flashcards →
+                    <!-- Mensaje de fin -->
+                    <div id="study-complete" class="text-center p-8 bg-gray-800 rounded-lg shadow-xl" style="display: none;">
+                        <h2 class="text-3xl font-bold text-emerald-400 mb-4">¡Sesión Completada!</h2>
+                        <p class="text-lg text-gray-300 mb-2">Has repasado todas las tarjetas de hoy.</p>
+                        <p class="text-lg text-gray-300">Puntos ganados: <span id="study-points-earned" class="font-bold text-white">0</span></p>
+                        <button id="study-finish-btn" class="mt-6 bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition-all">Volver al Mazo</button>
+                    </div>
+                </div>
+
+                <!-- Vista: Sesión de Quiz -->
+                <div id="quiz-view" class="view max-w-3xl mx-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center">
+                    <div class="w-full flex justify-between items-center mb-4">
+                        <button id="quiz-back-btn" class="text-emerald-400 hover:text-emerald-300 font-medium flex items-center space-x-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M11 17l-5-5m0 0l5-5m-5 5h12" />
+                            </svg>
+                            <span>Salir del Quiz</span>
                         </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Flashcards View -->
-            <div id="flashcardsView" class="view hidden">
-                <div class="flex justify-between items-center mb-6">
-                    <h2 class="text-3xl font-bold">Temas de Estudio</h2>
-                    <button id="createDeckBtn" class="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-xl font-semibold transition-all duration-300 flex items-center gap-2">
-                        <i class="fas fa-plus"></i>
-                        Nuevo Tema
-                    </button>
-                </div>
-
-                <div id="decksList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    <!-- Decks will be loaded here -->
-                </div>
-            </div>
-
-            <!-- Quiz View -->
-            <div id="quizView" class="view hidden">
-                <div class="max-w-4xl mx-auto">
-                    <div id="quizSelector" class="text-center">
-                        <h2 class="text-3xl font-bold mb-6">Modo Quiz</h2>
-                        <p class="text-gray-400 mb-8">Selecciona un tema para comenzar el quiz</p>
-                        <div id="quizDecksList" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <!-- Quiz decks will be loaded here -->
+                        <div class="text-sm text-gray-400">
+                            Tiempo: <span id="quiz-timer">0:00</span>
                         </div>
-                    </div>
-
-                    <div id="quizGame" class="hidden">
-                        <div class="bg-gray-800 rounded-2xl p-8 border border-gray-700">
-                            <div class="flex justify-between items-center mb-6">
-                                <div class="text-sm text-gray-400">Pregunta <span id="questionNumber">1</span> de <span id="totalQuestions">10</span></div>
-                                <div class="text-sm text-gray-400">Puntos: <span id="quizPoints">0</span></div>
-                            </div>
-                            
-                            <div id="questionCard" class="mb-8">
-                                <h3 id="questionText" class="text-2xl font-bold mb-6 text-center">Pregunta...</h3>
-                                <div id="questionImage" class="hidden mb-6 text-center">
-                                    <img class="max-w-xs mx-auto rounded-lg" alt="Imagen de la pregunta">
-                                </div>
-                            </div>
-                            
-                            <div id="answersContainer" class="grid grid-cols-1 gap-4 mb-6">
-                                <!-- Answer options will be loaded here -->
-                            </div>
-                            
-                            <div class="text-center">
-                                <button id="nextQuestionBtn" class="hidden px-8 py-3 bg-blue-600 hover:bg-blue-700 rounded-xl font-semibold transition-all duration-300">
-                                    Siguiente
-                                </button>
-                            </div>
+                        <div class="text-lg font-bold text-white">
+                            <span id="quiz-card-count">1</span> / <span id="quiz-card-total">10</span>
                         </div>
-                    </div>
-
-                    <div id="quizResults" class="hidden text-center">
-                        <div class="bg-gray-800 rounded-2xl p-8 border border-gray-700">
-                            <h2 class="text-3xl font-bold mb-4">¡Quiz Completado!</h2>
-                            <div class="text-6xl font-bold mb-4" id="finalScore">0</div>
-                            <div class="text-gray-400 mb-6">puntos obtenidos</div>
-                            <div class="text-xl mb-8">Precisión: <span id="accuracy" class="text-green-400">0%</span></div>
-                            <button id="playAgainBtn" class="px-8 py-3 bg-green-600 hover:bg-green-700 rounded-xl font-semibold transition-all duration-300 mr-4">
-                                Jugar de Nuevo
-                            </button>
-                            <button onclick="switchView('dashboard')" class="px-8 py-3 bg-gray-600 hover:bg-gray-700 rounded-xl font-semibold transition-all duration-300">
-                                Dashboard
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Tasks View -->
-            <div id="tasksView" class="view hidden">
-                <div class="flex justify-between items-center mb-6">
-                    <h2 class="text-3xl font-bold">Gestión de Tareas</h2>
-                    <button id="addTaskBtn" class="px-6 py-3 bg-purple-600 hover:bg-purple-700 rounded-xl font-semibold transition-all duration-300 flex items-center gap-2">
-                        <i class="fas fa-plus"></i>
-                        Nueva Tarea
-                    </button>
-                </div>
-
-                <div class="bg-gray-800 rounded-2xl p-6 border border-gray-700">
-                    <div id="tasksList" class="space-y-4">
-                        <!-- Tasks will be loaded here -->
-                    </div>
-                    <div id="emptyTasks" class="text-center py-12 text-gray-400 hidden">
-                        <i class="fas fa-clipboard-list text-6xl mb-4 opacity-50"></i>
-                        <p>No tienes tareas pendientes</p>
-                        <p class="text-sm">¡Agrega tu primera tarea para empezar!</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Stats View -->
-            <div id="statsView" class="view hidden">
-                <h2 class="text-3xl font-bold mb-6">Estadísticas</h2>
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                    
-                    <div class="bg-gray-800 rounded-2xl p-6 border border-gray-700">
-                        <h3 class="font-semibold mb-4 flex items-center gap-2">
-                            <i class="fas fa-clock text-blue-500"></i>
-                            Tiempo Total
-                        </h3>
-                        <div class="text-3xl font-bold text-blue-400" id="totalStudyTime">0h</div>
-                        <div class="text-sm text-gray-400">estudiado</div>
                     </div>
                     
-                    <div class="bg-gray-800 rounded-2xl p-6 border border-gray-700">
-                        <h3 class="font-semibold mb-4 flex items-center gap-2">
-                            <i class="fas fa-fire text-orange-500"></i>
-                            Mejor Racha
-                        </h3>
-                        <div class="text-3xl font-bold text-orange-400" id="bestStreak">0</div>
-                        <div class="text-sm text-gray-400">días</div>
-                    </div>
-                    
-                    <div class="bg-gray-800 rounded-2xl p-6 border border-gray-700">
-                        <h3 class="font-semibold mb-4 flex items-center gap-2">
-                            <i class="fas fa-check-circle text-green-500"></i>
-                            Tareas Completadas
-                        </h3>
-                        <div class="text-3xl font-bold text-green-400" id="completedTasks">0</div>
-                        <div class="text-sm text-gray-400">total</div>
-                    </div>
-                    
-                    <div class="bg-gray-800 rounded-2xl p-6 border border-gray-700">
-                        <h3 class="font-semibold mb-4 flex items-center gap-2">
-                            <i class="fas fa-trophy text-yellow-500"></i>
-                            Puntos Totales
-                        </h3>
-                        <div class="text-3xl font-bold text-yellow-400" id="totalPoints">0</div>
-                        <div class="text-sm text-gray-400">acumulados</div>
-                    </div>
-                </div>
-            </div>
-        </main>
-    </div>
-
-    <!-- Modals -->
-    <!-- Create Deck Modal -->
-    <div id="createDeckModal" class="modal">
-        <div class="modal-content">
-            <button type="button" class="modal-close">
-                <i class="fas fa-times"></i>
-            </button>
-            
-            <h3 class="text-2xl font-bold mb-6 pr-8">Nuevo Tema de Estudio</h3>
-            
-            <form id="createDeckForm">
-                <div class="mb-4">
-                    <label for="deckName" class="block text-sm font-medium mb-2 text-gray-300">Nombre del Tema</label>
-                    <input type="text" id="deckName" name="deckName" class="form-input" placeholder="Ej: Matemáticas - Álgebra" required>
-                </div>
-                
-                <div class="mb-6">
-                    <label for="deckDescription" class="block text-sm font-medium mb-2 text-gray-300">Descripción (opcional)</label>
-                    <textarea id="deckDescription" name="deckDescription" class="form-input" rows="3" placeholder="Descripción del tema..."></textarea>
-                </div>
-                
-                <div class="flex gap-3">
-                    <button type="submit" class="flex-1 py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold transition-colors duration-200">
-                        Crear Tema
-                    </button>
-                    <button type="button" class="modal-close px-6 py-3 bg-gray-600 hover:bg-gray-700 text-white rounded-xl font-semibold transition-colors duration-200">
-                        Cancelar
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Add Task Modal -->
-    <div id="addTaskModal" class="modal">
-        <div class="modal-content">
-            <button type="button" class="modal-close">
-                <i class="fas fa-times"></i>
-            </button>
-            
-            <h3 class="text-2xl font-bold mb-6 pr-8">Nueva Tarea</h3>
-            
-            <form id="addTaskForm">
-                <div class="mb-4">
-                    <label for="taskDescription" class="block text-sm font-medium mb-2 text-gray-300">Descripción de la Tarea</label>
-                    <input type="text" id="taskDescription" name="taskDescription" class="form-input" placeholder="¿Qué necesitas hacer?" required>
-                </div>
-                
-                <div class="mb-6">
-                    <label for="taskPriority" class="block text-sm font-medium mb-2 text-gray-300">Prioridad</label>
-                    <select id="taskPriority" name="taskPriority" class="form-input">
-                        <option value="alta">Alta</option>
-                        <option value="media" selected>Media</option>
-                        <option value="baja">Baja</option>
-                    </select>
-                </div>
-                
-                <div class="flex gap-3">
-                    <button type="submit" class="flex-1 py-3 px-4 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-semibold transition-colors duration-200">
-                        Agregar Tarea
-                    </button>
-                    <button type="button" class="modal-close px-6 py-3 bg-gray-600 hover:bg-gray-700 text-white rounded-xl font-semibold transition-colors duration-200">
-                        Cancelar
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Add Card Modal -->
-    <div id="addCardModal" class="modal">
-        <div class="modal-content max-w-2xl">
-            <button type="button" class="modal-close">
-                <i class="fas fa-times"></i>
-            </button>
-            
-            <h3 class="text-2xl font-bold mb-6 pr-8">Nueva Flashcard</h3>
-            
-            <form id="addCardForm">
-                <div class="mb-4">
-                    <label for="cardQuestion" class="block text-sm font-medium mb-2 text-gray-300">Pregunta</label>
-                    <textarea id="cardQuestion" name="cardQuestion" class="form-input" rows="3" placeholder="Escribe tu pregunta aquí..." required></textarea>
-                </div>
-                
-                <div class="mb-4">
-                    <label for="questionImage" class="block text-sm font-medium mb-2 text-gray-300">Imagen de la Pregunta (opcional)</label>
-                    <input type="file" id="questionImage" name="questionImage" class="form-input" accept="image/*">
-                </div>
-                
-                <div class="mb-4">
-                    <label for="cardAnswer" class="block text-sm font-medium mb-2 text-gray-300">Respuesta</label>
-                    <textarea id="cardAnswer" name="cardAnswer" class="form-input" rows="3" placeholder="Escribe la respuesta aquí..." required></textarea>
-                </div>
-                
-                <div class="mb-6">
-                    <label for="answerImage" class="block text-sm font-medium mb-2 text-gray-300">Imagen de la Respuesta (opcional)</label>
-                    <input type="file" id="answerImage" name="answerImage" class="form-input" accept="image/*">
-                </div>
-                
-                <div class="flex gap-3">
-                    <button type="submit" class="flex-1 py-3 px-4 bg-green-600 hover:bg-green-700 text-white rounded-xl font-semibold transition-colors duration-200">
-                        Agregar Carta
-                    </button>
-                    <button type="button" class="modal-close px-6 py-3 bg-gray-600 hover:bg-gray-700 text-white rounded-xl font-semibold transition-colors duration-200">
-                        Cancelar
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Study Session Modal -->
-    <div id="studyModal" class="modal">
-        <div class="modal-content max-w-3xl">
-            <button type="button" class="modal-close">
-                <i class="fas fa-times"></i>
-            </button>
-            
-            <h3 id="studyDeckTitle" class="text-2xl font-bold mb-6 pr-8">Estudiando...</h3>
-            
-            <div id="studyCard" class="text-center">
-                <div class="flashcard mb-8">
-                    <div class="flashcard-inner" id="flashcardInner">
-                        <div class="flashcard-front">
-                            <div id="studyCardFront" class="p-8">
-                                <h4 class="text-2xl mb-4">Pregunta</h4>
-                                <div id="studyQuestionText" class="text-lg mb-4">...</div>
-                                <div id="studyQuestionImage" class="hidden">
-                                    <img class="max-w-sm mx-auto rounded-lg" alt="Imagen de la pregunta">
-                                </div>
-                            </div>
+                    <!-- Contenido del Quiz -->
+                    <div id="quiz-active-content" class="w-full">
+                        <div class="bg-gray-800 rounded-xl shadow-2xl p-8 w-full mb-6 min-h-[12rem] flex items-center justify-center">
+                            <p id="quiz-card-front" class="text-2xl text-center font-medium text-white">Cargando pregunta...</p>
                         </div>
-                        <div class="flashcard-back">
-                            <div id="studyCardBack" class="p-8">
-                                <h4 class="text-2xl mb-4">Respuesta</h4>
-                                <div id="studyAnswerText" class="text-lg mb-4">...</div>
-                                <div id="studyAnswerImage" class="hidden">
-                                    <img class="max-w-sm mx-auto rounded-lg" alt="Imagen de la respuesta">
-                                </div>
-                            </div>
-                        </div>
+                        <form id="quiz-answer-form" class="w-full flex flex-col space-y-4">
+                            <textarea id="quiz-answer-input" placeholder="Escribe tu respuesta aquí..." class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-emerald-500 focus:border-emerald-500 block w-full p-2.5" rows="4" required></textarea>
+                            <button type="submit" class="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition-all">Comprobar</button>
+                        </form>
                     </div>
+
+                    <!-- Feedback de Respuesta -->
+                    <div id="quiz-feedback" class="w-full text-center p-6 bg-gray-800 rounded-lg" style="display: none;">
+                        <h3 id="feedback-title" class="text-2xl font-bold mb-4"></h3>
+                        <p class="text-gray-300 mb-2">Tu respuesta:</p>
+                        <p id="feedback-user-answer" class="mb-4 p-3 bg-gray-700 rounded-md"></p>
+                        <p class="text-gray-300 mb-2">Respuesta correcta:</p>
+                        <p id="feedback-correct-answer" class="mb-6 p-3 bg-gray-700 rounded-md"></p>
+                        <button id="quiz-next-btn" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition-all">Siguiente</button>
+                    </div>
+
+                    <!-- Resultados del Quiz -->
+                    <div id="quiz-results" class="text-center p-8 bg-gray-800 rounded-lg shadow-xl" style="display: none;">
+                        <h2 class="text-3xl font-bold text-emerald-400 mb-4">¡Quiz Completado!</h2>
+                        <p class="text-5xl font-bold text-white mb-4"><span id="quiz-score-percent">0</span>%</p>
+                        <p class="text-lg text-gray-300 mb-2">Acertaste <span id="quiz-score-correct" class="font-bold text-white">0</span> de <span id="quiz-score-total" class="font-bold text-white">0</span> preguntas.</p>
+                        <p class="text-lg text-gray-300">Puntos ganados: <span id="quiz-points-earned" class="font-bold text-white">0</span></p>
+                        <button id="quiz-finish-btn" class="mt-6 bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition-all">Volver al Mazo</button>
+                    </div>
+
                 </div>
-                
-                <div class="mb-6">
-                    <button id="flipCardBtn" class="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold transition-colors duration-200">
-                        Ver Respuesta
-                    </button>
-                </div>
-                
-                <div id="studyControls" class="hidden flex justify-center gap-4 flex-wrap">
-                    <button id="difficultyHard" class="px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-semibold transition-colors duration-200">
-                        Difícil
-                    </button>
-                    <button id="difficultyMedium" class="px-6 py-3 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-semibold transition-colors duration-200">
-                        Bien
-                    </button>
-                    <button id="difficultyEasy" class="px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-semibold transition-colors duration-200">
-                        Fácil
-                    </button>
-                </div>
-                
-                <div class="mt-6 text-sm text-gray-400">
-                    Carta <span id="cardProgress">1</span> de <span id="totalCards">1</span>
-                </div>
-            </div>
+
+            </main>
         </div>
     </div>
 
-    <!-- Notification Toast -->
-    <div id="toast" class="toast hidden">
-        <div class="toast-content">
-            <i id="toastIcon" class="fas fa-check-circle"></i>
-            <span id="toastMessage">Mensaje</span>
-        </div>
-    </div>
-
-    <!-- Firebase SDKs -->
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
-
-    <!-- App Scripts -->
-    <script src="assets/firebase-config.js"></script>
-    <script src="assets/app.js"></script>
+    <!-- Enlace al script externo. Es TIPO MODULO por los 'import' -->
+    <script type="module" src="assets/script.js"></script>
+    
 </body>
 </html>
