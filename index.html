@@ -350,26 +350,28 @@
     <!-- Create Deck Modal -->
     <div id="createDeckModal" class="modal">
         <div class="modal-content">
-            <button class="modal-close text-gray-400 hover:text-white">
-                <i class="fas fa-times text-xl"></i>
+            <button type="button" class="modal-close">
+                <i class="fas fa-times"></i>
             </button>
-            <div class="mb-6">
-                <h3 class="text-2xl font-bold">Nuevo Tema de Estudio</h3>
-            </div>
+            
+            <h3 class="text-2xl font-bold mb-6 pr-8">Nuevo Tema de Estudio</h3>
+            
             <form id="createDeckForm">
                 <div class="mb-4">
-                    <label class="block text-sm font-medium mb-2">Nombre del Tema</label>
-                    <input type="text" id="deckName" class="form-input" placeholder="Ej: Matemáticas - Álgebra" required>
+                    <label for="deckName" class="block text-sm font-medium mb-2 text-gray-300">Nombre del Tema</label>
+                    <input type="text" id="deckName" name="deckName" class="form-input" placeholder="Ej: Matemáticas - Álgebra" required>
                 </div>
+                
                 <div class="mb-6">
-                    <label class="block text-sm font-medium mb-2">Descripción (opcional)</label>
-                    <textarea id="deckDescription" class="form-input" rows="3" placeholder="Descripción del tema..."></textarea>
+                    <label for="deckDescription" class="block text-sm font-medium mb-2 text-gray-300">Descripción (opcional)</label>
+                    <textarea id="deckDescription" name="deckDescription" class="form-input" rows="3" placeholder="Descripción del tema..."></textarea>
                 </div>
-                <div class="flex gap-4">
-                    <button type="submit" class="flex-1 py-3 bg-blue-600 hover:bg-blue-700 rounded-xl font-semibold transition-all duration-300">
+                
+                <div class="flex gap-3">
+                    <button type="submit" class="flex-1 py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold transition-colors duration-200">
                         Crear Tema
                     </button>
-                    <button type="button" class="modal-close px-6 py-3 bg-gray-600 hover:bg-gray-700 rounded-xl font-semibold transition-all duration-300">
+                    <button type="button" class="modal-close px-6 py-3 bg-gray-600 hover:bg-gray-700 text-white rounded-xl font-semibold transition-colors duration-200">
                         Cancelar
                     </button>
                 </div>
@@ -380,30 +382,32 @@
     <!-- Add Task Modal -->
     <div id="addTaskModal" class="modal">
         <div class="modal-content">
-            <button class="modal-close text-gray-400 hover:text-white">
-                <i class="fas fa-times text-xl"></i>
+            <button type="button" class="modal-close">
+                <i class="fas fa-times"></i>
             </button>
-            <div class="mb-6">
-                <h3 class="text-2xl font-bold">Nueva Tarea</h3>
-            </div>
+            
+            <h3 class="text-2xl font-bold mb-6 pr-8">Nueva Tarea</h3>
+            
             <form id="addTaskForm">
                 <div class="mb-4">
-                    <label class="block text-sm font-medium mb-2">Descripción de la Tarea</label>
-                    <input type="text" id="taskDescription" class="form-input" placeholder="¿Qué necesitas hacer?" required>
+                    <label for="taskDescription" class="block text-sm font-medium mb-2 text-gray-300">Descripción de la Tarea</label>
+                    <input type="text" id="taskDescription" name="taskDescription" class="form-input" placeholder="¿Qué necesitas hacer?" required>
                 </div>
+                
                 <div class="mb-6">
-                    <label class="block text-sm font-medium mb-2">Prioridad</label>
-                    <select id="taskPriority" class="form-input">
+                    <label for="taskPriority" class="block text-sm font-medium mb-2 text-gray-300">Prioridad</label>
+                    <select id="taskPriority" name="taskPriority" class="form-input">
                         <option value="alta">Alta</option>
                         <option value="media" selected>Media</option>
                         <option value="baja">Baja</option>
                     </select>
                 </div>
-                <div class="flex gap-4">
-                    <button type="submit" class="flex-1 py-3 bg-purple-600 hover:bg-purple-700 rounded-xl font-semibold transition-all duration-300">
+                
+                <div class="flex gap-3">
+                    <button type="submit" class="flex-1 py-3 px-4 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-semibold transition-colors duration-200">
                         Agregar Tarea
                     </button>
-                    <button type="button" class="modal-close px-6 py-3 bg-gray-600 hover:bg-gray-700 rounded-xl font-semibold transition-all duration-300">
+                    <button type="button" class="modal-close px-6 py-3 bg-gray-600 hover:bg-gray-700 text-white rounded-xl font-semibold transition-colors duration-200">
                         Cancelar
                     </button>
                 </div>
@@ -414,34 +418,38 @@
     <!-- Add Card Modal -->
     <div id="addCardModal" class="modal">
         <div class="modal-content max-w-2xl">
-            <button class="modal-close text-gray-400 hover:text-white">
-                <i class="fas fa-times text-xl"></i>
+            <button type="button" class="modal-close">
+                <i class="fas fa-times"></i>
             </button>
-            <div class="mb-6">
-                <h3 class="text-2xl font-bold">Nueva Flashcard</h3>
-            </div>
+            
+            <h3 class="text-2xl font-bold mb-6 pr-8">Nueva Flashcard</h3>
+            
             <form id="addCardForm">
                 <div class="mb-4">
-                    <label class="block text-sm font-medium mb-2">Pregunta</label>
-                    <textarea id="cardQuestion" class="form-input" rows="3" placeholder="Escribe tu pregunta aquí..." required></textarea>
+                    <label for="cardQuestion" class="block text-sm font-medium mb-2 text-gray-300">Pregunta</label>
+                    <textarea id="cardQuestion" name="cardQuestion" class="form-input" rows="3" placeholder="Escribe tu pregunta aquí..." required></textarea>
                 </div>
+                
                 <div class="mb-4">
-                    <label class="block text-sm font-medium mb-2">Imagen de la Pregunta (opcional)</label>
-                    <input type="file" id="questionImage" class="form-input" accept="image/*">
+                    <label for="questionImage" class="block text-sm font-medium mb-2 text-gray-300">Imagen de la Pregunta (opcional)</label>
+                    <input type="file" id="questionImage" name="questionImage" class="form-input" accept="image/*">
                 </div>
+                
                 <div class="mb-4">
-                    <label class="block text-sm font-medium mb-2">Respuesta</label>
-                    <textarea id="cardAnswer" class="form-input" rows="3" placeholder="Escribe la respuesta aquí..." required></textarea>
+                    <label for="cardAnswer" class="block text-sm font-medium mb-2 text-gray-300">Respuesta</label>
+                    <textarea id="cardAnswer" name="cardAnswer" class="form-input" rows="3" placeholder="Escribe la respuesta aquí..." required></textarea>
                 </div>
+                
                 <div class="mb-6">
-                    <label class="block text-sm font-medium mb-2">Imagen de la Respuesta (opcional)</label>
-                    <input type="file" id="answerImage" class="form-input" accept="image/*">
+                    <label for="answerImage" class="block text-sm font-medium mb-2 text-gray-300">Imagen de la Respuesta (opcional)</label>
+                    <input type="file" id="answerImage" name="answerImage" class="form-input" accept="image/*">
                 </div>
-                <div class="flex gap-4">
-                    <button type="submit" class="flex-1 py-3 bg-green-600 hover:bg-green-700 rounded-xl font-semibold transition-all duration-300">
+                
+                <div class="flex gap-3">
+                    <button type="submit" class="flex-1 py-3 px-4 bg-green-600 hover:bg-green-700 text-white rounded-xl font-semibold transition-colors duration-200">
                         Agregar Carta
                     </button>
-                    <button type="button" class="modal-close px-6 py-3 bg-gray-600 hover:bg-gray-700 rounded-xl font-semibold transition-all duration-300">
+                    <button type="button" class="modal-close px-6 py-3 bg-gray-600 hover:bg-gray-700 text-white rounded-xl font-semibold transition-colors duration-200">
                         Cancelar
                     </button>
                 </div>
@@ -452,12 +460,11 @@
     <!-- Study Session Modal -->
     <div id="studyModal" class="modal">
         <div class="modal-content max-w-3xl">
-            <button class="modal-close text-gray-400 hover:text-white">
-                <i class="fas fa-times text-xl"></i>
+            <button type="button" class="modal-close">
+                <i class="fas fa-times"></i>
             </button>
-            <div class="mb-6">
-                <h3 id="studyDeckTitle" class="text-2xl font-bold">Estudiando...</h3>
-            </div>
+            
+            <h3 id="studyDeckTitle" class="text-2xl font-bold mb-6 pr-8">Estudiando...</h3>
             
             <div id="studyCard" class="text-center">
                 <div class="flashcard mb-8">
@@ -484,19 +491,19 @@
                 </div>
                 
                 <div class="mb-6">
-                    <button id="flipCardBtn" class="px-8 py-3 bg-blue-600 hover:bg-blue-700 rounded-xl font-semibold transition-all duration-300">
+                    <button id="flipCardBtn" class="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold transition-colors duration-200">
                         Ver Respuesta
                     </button>
                 </div>
                 
-                <div id="studyControls" class="hidden flex justify-center gap-4">
-                    <button id="difficultyHard" class="px-6 py-3 bg-red-600 hover:bg-red-700 rounded-xl font-semibold transition-all duration-300">
+                <div id="studyControls" class="hidden flex justify-center gap-4 flex-wrap">
+                    <button id="difficultyHard" class="px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-semibold transition-colors duration-200">
                         Difícil
                     </button>
-                    <button id="difficultyMedium" class="px-6 py-3 bg-yellow-600 hover:bg-yellow-700 rounded-xl font-semibold transition-all duration-300">
+                    <button id="difficultyMedium" class="px-6 py-3 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-semibold transition-colors duration-200">
                         Bien
                     </button>
-                    <button id="difficultyEasy" class="px-6 py-3 bg-green-600 hover:bg-green-700 rounded-xl font-semibold transition-all duration-300">
+                    <button id="difficultyEasy" class="px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-semibold transition-colors duration-200">
                         Fácil
                     </button>
                 </div>
@@ -522,7 +529,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
 
     <!-- App Scripts -->
-    <script src="assets/Firebase config.js"></script>
+    <script src="assets/firebase-config.js"></script>
     <script src="assets/app.js"></script>
 </body>
 </html>

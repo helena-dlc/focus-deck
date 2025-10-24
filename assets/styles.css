@@ -151,46 +151,113 @@ body {
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
-/* Modales */
+/* Modales - Sistema completamente reescrito */
 .modal {
-  @apply fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 opacity-0 pointer-events-none transition-all duration-300;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  z-index: 9999;
+  opacity: 0;
   visibility: hidden;
+  pointer-events: none;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .modal.active {
-  @apply opacity-100 pointer-events-auto;
+  opacity: 1;
   visibility: visible;
+  pointer-events: auto;
 }
 
 .modal-content {
-  @apply bg-gray-800 rounded-2xl p-6 max-w-md w-full border border-gray-700 transform scale-95 transition-all duration-300 relative;
+  background-color: #1f2937;
+  border-radius: 1rem;
+  padding: 2rem;
+  width: 100%;
+  max-width: 28rem;
   max-height: 90vh;
   overflow-y: auto;
+  border: 1px solid #374151;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  position: relative;
+  transform: scale(0.9) translateY(20px);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .modal.active .modal-content {
-  @apply scale-100;
+  transform: scale(1) translateY(0);
+}
+
+.modal-content.max-w-2xl {
+  max-width: 42rem;
+}
+
+.modal-content.max-w-3xl {
+  max-width: 48rem;
 }
 
 .modal-close {
-  @apply cursor-pointer transition-colors duration-300 absolute top-4 right-4 z-10 w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-700;
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: transparent;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  border-radius: 0.5rem;
+  transition: all 0.2s ease;
+  z-index: 10;
 }
 
-/* Mejoras responsive para modales */
+.modal-close:hover {
+  background-color: #374151;
+  color: #ffffff;
+}
+
+/* Asegurar que solo un modal esté activo */
+.modal.active ~ .modal {
+  z-index: 9998;
+}
+
+/* Mejoras responsive */
 @media (max-width: 768px) {
   .modal {
-    @apply p-2;
+    padding: 0.5rem;
   }
 
   .modal-content {
-    @apply p-4 max-w-full;
+    padding: 1.5rem;
+    border-radius: 0.75rem;
     max-height: 95vh;
   }
 
   .modal-content.max-w-2xl,
   .modal-content.max-w-3xl {
-    @apply max-w-full;
+    max-width: 100%;
   }
+}
+
+/* Override para cualquier conflicto de Tailwind */
+.modal * {
+  box-sizing: border-box;
+}
+
+/* Prevenir scroll del body cuando modal está activo */
+body.modal-open {
+  overflow: hidden;
 }
 
 /* Flashcards */

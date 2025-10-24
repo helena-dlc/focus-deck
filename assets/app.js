@@ -34,6 +34,9 @@ class FocusDeckApp {
     try {
       console.log('🚀 Inicializando Focus Deck...');
       
+      // Limpiar estado inicial de modales
+      this.initializeModals();
+      
       // Configurar event listeners
       this.setupEventListeners();
       
@@ -53,6 +56,27 @@ class FocusDeckApp {
     }
   }
 
+  initializeModals() {
+    console.log('🔧 Inicializando sistema de modales...');
+    
+    // Asegurar que todos los modales estén cerrados al inicio
+    const allModals = document.querySelectorAll('.modal');
+    allModals.forEach(modal => {
+      modal.classList.remove('active');
+      modal.style.visibility = 'hidden';
+      modal.style.opacity = '0';
+      modal.style.pointerEvents = 'none';
+    });
+    
+    // Limpiar clases del body
+    document.body.classList.remove('modal-open');
+    
+    // Agregar clase para debugging
+    document.body.setAttribute('data-modal-system', 'initialized');
+    
+    console.log('✅ Sistema de modales inicializado');
+  }
+
   setupEventListeners() {
     // Autenticación
     document.getElementById('googleSignIn').addEventListener('click', () => this.signInWithGoogle());
@@ -67,29 +91,39 @@ class FocusDeckApp {
       });
     });
 
-    // Modales
-    document.querySelectorAll('.modal-close').forEach(btn => {
-      btn.addEventListener('click', (e) => {
+    // === EVENT LISTENERS PARA MODALES ===
+    
+    // Botones de cerrar modal
+    document.addEventListener('click', (e) => {
+      if (e.target.matches('.modal-close, .modal-close *')) {
         e.preventDefault();
         e.stopPropagation();
         const modal = e.target.closest('.modal');
-        this.closeModal(modal);
-      });
-    });
-
-    // Clics fuera del modal
-    document.querySelectorAll('.modal').forEach(modal => {
-      modal.addEventListener('click', (e) => {
-        if (e.target === modal) {
+        if (modal) {
           this.closeModal(modal);
         }
-      });
+      }
+    });
+
+    // Clics fuera del modal (en el backdrop)
+    document.addEventListener('click', (e) => {
+      if (e.target.classList.contains('modal') && e.target.classList.contains('active')) {
+        this.closeModal(e.target);
+      }
     });
 
     // Cerrar modales con tecla Escape
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
-        this.closeAllModals();
+        e.preventDefault();
+        this.forceCloseAllModals();
+      }
+    });
+
+    // Prevenir propagación en contenido del modal
+    document.addEventListener('click', (e) => {
+      if (e.target.closest('.modal-content')) {
+        e.stopPropagation();
       }
     });
 
@@ -296,25 +330,92 @@ class FocusDeckApp {
     }
   }
 
-  // === MODALES ===
+  // === DEBUG PARA MODALES ===
   
-  openModal(modalId) {
-    // Cerrar todos los modales activos primero
-    document.querySelectorAll('.modal.active').forEach(modal => {
-      modal.classList.remove('active');
+  debugModals() {
+    console.log('🔍 === DEBUG MODALES ===');
+    const allModals = document.querySelectorAll('.modal');
+    const activeModals = document.querySelectorAll('.modal.active');
+    
+    console.log('📊 Total de modales:', allModals.length);
+    console.log('🔥 Modales activos:', activeModals.length);
+    
+    allModals.forEach((modal, index) => {
+      console.log(`📋 Modal ${index + 1}:`, {
+        id: modal.id,
+        active: modal.classList.contains('active'),
+        visible: modal.style.visibility !== 'hidden',
+        zIndex: getComputedStyle(modal).zIndex,
+        display: getComputedStyle(modal).display
+      });
     });
     
-    // Abrir el modal solicitado
-    const modal = document.getElementById(modalId);
-    if (modal) {
+    if (activeModals.length > 1) {
+      console.warn('⚠️ PROBLEMA: Múltiples modales activos detectados!');
+      console.log('🔧 Forzando cierre de todos...');
+      this.forceCloseAllModals();
+    }
+    
+    console.log('📱 Body classes:', document.body.className);
+    console.log('🔍 === FIN DEBUG ===');
+  }
+
+  // === MODALES - SISTEMA COMPLETAMENTE REESCRITO ===
+  
+  openModal(modalId) {
+    console.log('🔓 Abriendo modal:', modalId);
+    
+    // Debug inicial
+    this.debugModals();
+    
+    // Cerrar TODOS los modales activos primero (forzado)
+    this.forceCloseAllModals();
+    
+    // Esperar un frame para asegurar que se cierren
+    requestAnimationFrame(() => {
+      const modal = document.getElementById(modalId);
+      if (!modal) {
+        console.error('❌ Modal no encontrado:', modalId);
+        return;
+      }
+      
+      // Verificar que no hay otros modales activos
+      const activeModals = document.querySelectorAll('.modal.active');
+      if (activeModals.length > 0) {
+        console.warn('⚠️ Hay modales activos aún, forzando cierre...');
+        activeModals.forEach(m => m.classList.remove('active'));
+      }
+      
+      // Activar el modal específico
       modal.classList.add('active');
+      document.body.classList.add('modal-open');
+      
+      // Debug: Verificar estado
+      console.log('✅ Modal activado:', modalId);
+      console.log('📊 Clases del modal:', modal.className);
+      console.log('📱 Clases del body:', document.body.className);
+      
+      // Verificar que solo este modal está activo
+      const nowActiveModals = document.querySelectorAll('.modal.active');
+      if (nowActiveModals.length > 1) {
+        console.error('🚨 PROBLEMA: Múltiples modales siguen activos!');
+        nowActiveModals.forEach((m, i) => {
+          if (m.id !== modalId) {
+            console.log(`🔧 Cerrando modal extra: ${m.id}`);
+            m.classList.remove('active');
+          }
+        });
+      }
       
       // Focus en el primer input después de la animación
       setTimeout(() => {
-        const firstInput = modal.querySelector('input, textarea');
-        if (firstInput) firstInput.focus();
+        const firstInput = modal.querySelector('input:not([type="file"]), textarea, select');
+        if (firstInput) {
+          firstInput.focus();
+          firstInput.select();
+        }
       }, 150);
-    }
+    });
   }
 
   closeModal(modal) {
@@ -322,19 +423,52 @@ class FocusDeckApp {
       modal = document.getElementById(modal);
     }
     
-    if (modal) {
+    if (!modal) return;
+    
+    console.log('🔒 Cerrando modal:', modal.id);
+    
+    modal.classList.remove('active');
+    
+    // Verificar si hay otros modales activos
+    const activeModals = document.querySelectorAll('.modal.active');
+    if (activeModals.length === 0) {
+      document.body.classList.remove('modal-open');
+    }
+    
+    // Limpiar formularios después de la animación
+    setTimeout(() => {
+      const forms = modal.querySelectorAll('form');
+      forms.forEach(form => {
+        form.reset();
+        // Limpiar campos específicos que reset() no limpia
+        const fileInputs = form.querySelectorAll('input[type="file"]');
+        fileInputs.forEach(input => input.value = '');
+      });
+    }, 300);
+  }
+
+  forceCloseAllModals() {
+    console.log('🚫 Forzando cierre de todos los modales');
+    
+    const allModals = document.querySelectorAll('.modal');
+    allModals.forEach(modal => {
       modal.classList.remove('active');
       
-      // Limpiar formularios después de la animación
-      setTimeout(() => {
-        const forms = modal.querySelectorAll('form');
-        forms.forEach(form => form.reset());
-      }, 300);
-    }
+      // Limpiar formularios inmediatamente
+      const forms = modal.querySelectorAll('form');
+      forms.forEach(form => form.reset());
+    });
+    
+    document.body.classList.remove('modal-open');
+    
+    // Debug: Verificar que no hay modales activos
+    const activeModals = document.querySelectorAll('.modal.active');
+    console.log('🔍 Modales activos después del cierre forzado:', activeModals.length);
   }
 
   closeAllModals() {
-    document.querySelectorAll('.modal.active').forEach(modal => {
+    const activeModals = document.querySelectorAll('.modal.active');
+    activeModals.forEach(modal => {
       this.closeModal(modal);
     });
   }
