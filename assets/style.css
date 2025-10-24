@@ -77,3 +77,63 @@ body {
   display: block;
   opacity: 1;
 }
+
+/* Mejoras para las tarjetas de deck */
+.deck-card {
+  min-height: 200px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.deck-card h3 {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  hyphens: auto;
+  line-height: 1.2;
+}
+
+.deck-card .flex.gap-2 {
+  gap: 0.25rem; /* Reducir gap entre botones */
+  flex-wrap: nowrap;
+}
+
+.deck-card button {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0; /* Permite que los botones se contraigan */
+  font-size: 0.75rem; /* Texto más pequeño */
+  padding: 0.375rem 0.5rem; /* Padding más pequeño */
+}
+
+.study-deck-btn {
+  flex: 1.5; /* Dar más espacio al botón principal */
+}
+
+.manage-deck-btn,
+.quiz-deck-btn {
+  flex: 1; /* Botones secundarios más pequeños */
+}
+
+/* Responsive para pantallas pequeñas */
+@media (max-width: 640px) {
+  .deck-card .flex.gap-2 {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .deck-card button {
+    flex: none;
+    width: 100%;
+    font-size: 0.875rem;
+    padding: 0.5rem 1rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .deck-card button {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+  }
+}

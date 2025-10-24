@@ -492,19 +492,21 @@ document.addEventListener('DOMContentLoaded', () => {
             const deckEl = document.createElement('div');
             deckEl.className = 'deck-card bg-dark-card p-6 rounded-2xl shadow-lg hover:shadow-xl transition-shadow cursor-pointer';
             deckEl.innerHTML = `
-                <h3 class="text-xl font-bold mb-3">${deck.name}</h3>
-                <div class="flex justify-between items-center text-sm text-slate-300 mb-4">
-                    <span>${totalCards} tarjetas</span>
-                    <span class="text-primary">${cardsToReview} por revisar</span>
+                <div class="flex-grow">
+                    <h3 class="text-xl font-bold mb-3 leading-tight">${deck.name}</h3>
+                    <div class="flex justify-between items-center text-sm text-slate-300 mb-4">
+                        <span>${totalCards} tarjetas</span>
+                        <span class="text-primary">${cardsToReview} por revisar</span>
+                    </div>
                 </div>
-                <div class="flex gap-2">
-                    <button class="study-deck-btn flex-1 bg-primary hover:bg-primary-dark text-dark-bg font-semibold py-2 px-4 rounded-full text-sm" data-deck-id="${deck.id}">
+                <div class="flex gap-2 mt-auto">
+                    <button class="study-deck-btn bg-primary hover:bg-primary-dark text-dark-bg font-semibold py-2 px-3 rounded-full text-xs" data-deck-id="${deck.id}">
                         Estudiar
                     </button>
-                    <button class="manage-deck-btn bg-dark-border hover:bg-slate-600 text-secondary font-semibold py-2 px-4 rounded-full text-sm" data-deck-id="${deck.id}">
+                    <button class="manage-deck-btn bg-dark-border hover:bg-slate-600 text-secondary font-semibold py-2 px-3 rounded-full text-xs" data-deck-id="${deck.id}">
                         Gestionar
                     </button>
-                    <button class="quiz-deck-btn bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-full text-sm" data-deck-id="${deck.id}">
+                    <button class="quiz-deck-btn bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-3 rounded-full text-xs" data-deck-id="${deck.id}">
                         Quiz
                     </button>
                 </div>
