@@ -1,6 +1,4 @@
 // --- IMPORTACIONES DE FIREBASE ---
-// Usamos la versión "compat" para una transición más fácil desde tu código
-// Esta es la forma moderna de importar
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-analytics.js";
 import { 
@@ -21,8 +19,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 
-// --- CONFIGURACIÓN DE FIREBASE (¡NUEVO!) ---
-// ¡Estas son las "llaves"!
+// --- CONFIGURACIÓN DE FIREBASE ---
 const firebaseConfig = {
   apiKey: "AIzaSyC6tqffatZ7NhMm5bGRh0kmjCLymj0DD74",
   authDomain: "focus-deck.firebaseapp.com",
@@ -33,16 +30,16 @@ const firebaseConfig = {
   measurementId: "G-YNNE0HPCK2"
 };
 
-// --- INICIALIZAR FIREBASE (¡NUEVO!) ---
+// --- INICIALIZAR FIREBASE ---
 const app = initializeApp(firebaseConfig);
 const analytics = getAnalytics(app);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
 // --- ESTADO GLOBAL ---
-let currentUserId = null; // ID del usuario logueado
-let unsubscribeFromFirestore = null; // Función para dejar de escuchar cambios
-const defaultState = { // Estado inicial para un nuevo usuario
+let currentUserId = null;
+let unsubscribeFromFirestore = null;
+const defaultState = {
     points: 0,
     decks: [],
     tasks: [],
@@ -63,7 +60,7 @@ const defaultState = { // Estado inicial para un nuevo usuario
         correctAnswers: 0,
     }
 };
-let state = { ...defaultState }; // El estado activo de la aplicación
+let state = { ...defaultState };
 
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -84,13 +81,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const manageDeckView = document.getElementById('manage-deck-view');
     const quizView = document.getElementById('quiz-view');
     
-    // Autenticación
+    // Autenticación (¡REFERENCIAS CLAVE!)
     const authContainer = document.getElementById('auth-container');
     const loginView = document.getElementById('login-view');
     const mainContent = document.getElementById('main-content');
     const loginBtn = document.getElementById('login-btn');
     const logoutBtn = document.getElementById('logout-btn');
     const userProfilePic = document.getElementById('user-profile-pic');
+    const pointsContainer = document.getElementById('points-container'); // Para ocultar puntos
     
     // --- Pomodoro ---
     const pomodoroTimerEl = document.getElementById('pomodoro-timer');
@@ -156,35 +154,26 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('back-to-dashboard-quiz').addEventListener('click', () => navigate(VIEWS.DASHBOARD));
 
 
-    // --- State Management & Persistence (¡REHECHO CON FIREBASE!) ---
+    // --- State Management & Persistence ---
     
-    /**
-     * Guarda el estado actual de la aplicación en Firestore.
-     * Esta función reemplaza a saveState() con localStorage.
-     */
     async function saveStateToFirestore() {
         if (!currentUserId) {
             console.warn("Intento de guardado sin usuario logueado.");
             return;
         }
         try {
-            // Creamos una copia del estado para no guardar cosas innecesarias
             const stateToSave = { ...state };
-            // No guardamos el timer, solo la info de tiempo
             if (stateToSave.pomodoro) {
                  delete stateToSave.pomodoro.timer; 
             }
-            // No guardamos la sesión de estudio
             stateToSave.studySession = defaultState.studySession;
 
-            // Convertimos las fechas de las tarjetas (si existen) a Timestamps
             if (stateToSave.decks) {
                 stateToSave.decks.forEach(deck => {
                     if (deck.cards) {
                         deck.cards.forEach(card => {
                             if (card.nextReviewDate && !(card.nextReviewDate instanceof Timestamp)) {
                                 try {
-                                    // Asumimos que es un string ISO "YYYY-MM-DD"
                                     const date = new Date(card.nextReviewDate + 'T00:00:00');
                                     if (!isNaN(date.getTime())) {
                                         card.nextReviewDate = Timestamp.fromDate(date);
@@ -204,7 +193,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             const userDocRef = doc(db, "users", currentUserId);
-            // Usamos setDoc con merge:true para crear o actualizar el documento
             await setDoc(userDocRef, stateToSave, { merge: true });
         } catch (error) {
             console.error("Error guardando estado en Firestore: ", error);
@@ -212,12 +200,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    /**
-     * Escucha cambios en los datos del usuario desde Firestore en tiempo real.
-     * Reemplaza a loadState()
-     */
     function listenToUserData(userId) {
-        // Si ya hay una escucha, la cancelamos
         if (unsubscribeFromFirestore) {
             unsubscribeFromFirestore();
         }
@@ -226,30 +209,24 @@ document.addEventListener('DOMContentLoaded', () => {
         
         unsubscribeFromFirestore = onSnapshot(userDocRef, (docSnap) => {
             if (docSnap.exists()) {
-                // --- El usuario ya tiene datos guardados ---
                 const firestoreData = docSnap.data();
-                
-                // Cargamos el estado desde Firestore
                 state = { ...defaultState, ...firestoreData };
 
-                // --- MIGRACIÓN DE DATOS (igual que antes) ---
+                // --- MIGRACIÓN DE DATOS ---
                 const defaultPomodoro = { timer: null, timeLeft: 25 * 60, isBreak: false, isRunning: false, endTime: null };
                 state.pomodoro = { ...defaultPomodoro, ...(state.pomodoro || {}) };
                 if (state.pomodoro.isRunning) {
                     state.pomodoro.isRunning = false; 
                 }
                 
-                state.studySession = defaultState.studySession; // Nunca guardamos una sesión en progreso
+                state.studySession = defaultState.studySession; 
                 
-                // Convertir Timestamps de Firestore a strings "YYYY-MM-DD"
                 if (state.decks) {
                     state.decks.forEach(deck => {
                         if (deck.cards) {
                             deck.cards.forEach(card => {
-                                // Asegurar que las tarjetas tienen las nuevas props
                                 card.questionImg = card.questionImg || null;
                                 card.answerImg = card.answerImg || null;
-                                // Convertir Timestamp a string
                                 if (card.nextReviewDate && card.nextReviewDate.toDate) {
                                     card.nextReviewDate = card.nextReviewDate.toDate().toISOString().split('T')[0];
                                 } else if (!card.nextReviewDate) {
@@ -259,18 +236,14 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                     });
                 }
-                // --- FIN MIGRACIÓN ---
                 
             } else {
-                // --- Es un usuario nuevo ---
                 console.log("Usuario nuevo, creando documento...");
                 state = { ...defaultState };
-                saveStateToFirestore(); // Guardamos el estado inicial en la nube
+                saveStateToFirestore(); 
             }
             
-            // Renderizamos la app con los datos cargados
             render();
-            // Re-chequear pomodoro por si se recargó la página
             checkRunningPomodoro();
             
         }, (error) => {
@@ -279,17 +252,12 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
-    /**
-     * Registra una actividad de estudio en el log (para la racha).
-     * Guarda el estado si es la primera actividad del día.
-     */
     async function logStudyActivity() {
         const today = getTodayString();
         if (!state.studyLog.includes(today)) {
             console.log("Registrando actividad de estudio para la racha de hoy.");
             state.studyLog.push(today);
             
-            // Actualización más rápida en Firestore usando updateDoc y arrayUnion
             if (currentUserId) {
                 try {
                     const userDocRef = doc(db, "users", currentUserId);
@@ -298,16 +266,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     });
                 } catch(e) {
                     console.error("Error actualizando studyLog: ", e);
-                    // Si falla (ej. doc no existe), recurrir a saveStateToFirestore
                     await saveStateToFirestore();
                 }
             }
-            renderStats(); // Actualizar la UI de estadísticas inmediatamente
+            renderStats();
         }
     }
 
 
-    // --- Lógica de Autenticación (¡NUEVO!) ---
+    // --- Lógica de Autenticación (¡CORREGIDA!) ---
 
     /**
      * Maneja el estado de autenticación del usuario.
@@ -318,17 +285,19 @@ document.addEventListener('DOMContentLoaded', () => {
             currentUserId = user.uid;
             console.log("Usuario logueado:", currentUserId);
             
-            // Mostramos la app y ocultamos el login
-            mainContent.classList.remove('hidden');
+            // --- ¡CORRECCIÓN AQUÍ! ---
+            // Ocultamos el modal de login
             authContainer.classList.add('hidden');
-            loginView.classList.add('hidden');
+            // Mostramos la app principal
+            mainContent.classList.remove('hidden');
             
-            // Mostramos la info del usuario
+            // Mostramos la info del usuario en el header
             if (user.photoURL) {
                 userProfilePic.src = user.photoURL;
                 userProfilePic.classList.remove('hidden');
             }
             logoutBtn.classList.remove('hidden');
+            pointsContainer.classList.remove('hidden'); // Mostrar puntos
 
             // Empezamos a escuchar los datos de ESTE usuario
             listenToUserData(currentUserId);
@@ -338,14 +307,16 @@ document.addEventListener('DOMContentLoaded', () => {
             currentUserId = null;
             console.log("Usuario deslogueado.");
 
-            // Ocultamos la app y mostramos el login
-            mainContent.classList.add('hidden');
+            // --- ¡CORRECCIÓN AQUÍ! ---
+            // Mostramos el modal de login
             authContainer.classList.remove('hidden');
-            loginView.classList.remove('hidden');
+            // Ocultamos la app principal
+            mainContent.classList.add('hidden');
             
-            // Ocultamos info de usuario
+            // Ocultamos info de usuario en el header
             userProfilePic.classList.add('hidden');
             logoutBtn.classList.add('hidden');
+            pointsContainer.classList.add('hidden'); // Ocultar puntos
             
             // Dejamos de escuchar datos
             if (unsubscribeFromFirestore) {
@@ -355,7 +326,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // Reseteamos el estado al por defecto
             state = { ...defaultState };
-            render();
+            render(); // Renderizará un dashboard vacío (que está oculto)
         }
     });
 
@@ -394,14 +365,11 @@ document.addEventListener('DOMContentLoaded', () => {
     function navigate(viewId) {
         state.currentView = viewId;
         render();
-        // saveStateToFirestore(); // Guardamos el estado al cambiar de vista
     }
 
     function render() {
-        // Ocultar todas las vistas
         views.forEach(v => v.classList.add('hidden'));
 
-        // Mostrar la vista activa
         switch (state.currentView) {
             case VIEWS.DASHBOARD:
                 renderDashboard();
@@ -424,10 +392,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 dashboardView.classList.remove('hidden');
         }
         
-        // Renderizar componentes persistentes
         pointsEl.textContent = state.points;
         updatePomodoroUI();
-        lucide.createIcons(); // Re-renderizar iconos por si se añadieron dinámicamente
+        lucide.createIcons();
     }
 
     // --- Render Dashboard ---
@@ -439,19 +406,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Lógica de Tareas ---
     function renderTaskList() {
-        taskList.innerHTML = ''; // Limpiar lista
+        taskList.innerHTML = '';
         if (state.tasks.length === 0) {
             taskList.innerHTML = '<p class="text-sm text-slate-400 px-3">No hay tareas pendientes. ¡Añade una!</p>';
             return;
         }
 
-        // Ordenar tareas por prioridad (Alta > Media > Baja) y luego por fecha (más nuevas primero)
         const priorityOrder = { 'Alta': 3, 'Media': 2, 'Baja': 1 };
         const sortedTasks = [...state.tasks].sort((a, b) => {
             if (priorityOrder[a.priority] !== priorityOrder[b.priority]) {
                 return priorityOrder[b.priority] - priorityOrder[a.priority];
             }
-            return b.id - a.id; // Asumiendo que id es un timestamp o similar
+            return b.id - a.id;
         });
 
         sortedTasks.forEach(task => {
@@ -500,10 +466,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (completeBtn) {
             const taskId = Number(completeBtn.dataset.taskId);
-            // Marcar tarea como completada (en este caso, la eliminamos y damos puntos)
             state.tasks = state.tasks.filter(t => t.id !== taskId);
             state.points += 10;
-            logStudyActivity(); // ¡Registrar actividad!
+            logStudyActivity();
             render();
             saveStateToFirestore();
             showNotification("¡Tarea completada! +10 puntos");
@@ -519,7 +484,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Lógica de Temas (Decks) ---
     function renderDeckList() {
-        deckList.innerHTML = ''; // Limpiar lista
+        deckList.innerHTML = '';
         if (state.decks.length === 0) {
             noDecksMessage.classList.remove('hidden');
             return;
@@ -612,7 +577,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         state.decks.forEach(deck => {
             if (deck.cards.length > 0) {
-                // Intervalo de maestría: 21 días o más
                 const masteredCards = deck.cards.filter(c => getNextInterval(c.interval || 0, 'easy') >= 21).length;
                 const domain = (masteredCards / deck.cards.length) * 100;
 
@@ -648,35 +612,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
         while (dates.has(currentDate.toISOString().split('T')[0])) {
             streak++;
-            currentDate.setDate(currentDate.getDate() - 1); // Retroceder un día
+            currentDate.setDate(currentDate.getDate() - 1);
         }
         
-        // Si no estudió hoy, pero sí ayer, la racha es la de ayer.
-        if (!dates.has(todayString) && streak > 0) {
-            // El bucle se detuvo en el primer día que NO estudió (hoy),
-            // así que la racha de "ayer" es correcta.
-            // Pero si el bucle contó hoy (streak > 0) y no estamos en hoy,
-            // tenemos que restar 1.
-            // Es más simple: si el log no incluye hoy, la racha se rompió.
-            // PERO, si el log sí incluye hoy, la racha es `streak`.
-            // Si el log NO incluye hoy:
-            if (!dates.has(todayString)) {
-                // ¿Estudió ayer?
-                let yesterday = new Date(todayString + 'T00:00:00');
-                yesterday.setDate(yesterday.getDate() - 1);
-                if (dates.has(yesterday.toISOString().split('T')[0])) {
-                    // Sí estudió ayer, la racha empieza desde ayer.
-                    streak = 0;
-                    currentDate = yesterday;
-                    while (dates.has(currentDate.toISOString().split('T')[0])) {
-                        streak++;
-                        currentDate.setDate(currentDate.getDate() - 1);
-                    }
-                    return streak;
-                } else {
-                    // No estudió ni hoy ni ayer. Racha es 0.
-                    return 0;
+        if (!dates.has(todayString)) {
+            let yesterday = new Date(todayString + 'T00:00:00');
+            yesterday.setDate(yesterday.getDate() - 1);
+            if (dates.has(yesterday.toISOString().split('T')[0])) {
+                streak = 0;
+                currentDate = yesterday;
+                while (dates.has(currentDate.toISOString().split('T')[0])) {
+                    streak++;
+                    currentDate.setDate(currentDate.getDate() - 1);
                 }
+                return streak;
+            } else {
+                return 0;
             }
         }
         
@@ -730,7 +681,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 answerImg: cardAnswerImgInput.value.trim() || null,
                 interval: 0,
                 easeFactor: 2.5,
-                nextReviewDate: getTodayString() // Revisar hoy
+                nextReviewDate: getTodayString()
             };
             deck.cards.push(newCard);
             renderManageView();
@@ -770,7 +721,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const today = getTodayString();
         const cardsToReview = deck.cards
             .filter(c => c.nextReviewDate <= today)
-            // Opcional: barajar las tarjetas
             .sort(() => Math.random() - 0.5);
 
         state.studySession = {
@@ -779,7 +729,7 @@ document.addEventListener('DOMContentLoaded', () => {
             correctAnswers: 0,
         };
         
-        logStudyActivity(); // Registrar actividad al INICIAR sesión
+        logStudyActivity();
     }
     
     function renderStudyView() {
@@ -794,7 +744,6 @@ document.addEventListener('DOMContentLoaded', () => {
         studyDeckTitle.textContent = deck.name;
         
         if (currentCardIndex >= cardsToReview.length) {
-            // Sesión terminada
             studyProgress.textContent = `Progreso: ${cardsToReview.length} / ${cardsToReview.length}`;
             studyCard.innerHTML = `
                 <div class="text-center p-8">
@@ -805,19 +754,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     </button>
                 </div>
             `;
-            // Añadir listener al botón de finalizar
             document.getElementById('finish-study-session-btn').addEventListener('click', () => {
                 navigate(VIEWS.DASHBOARD);
-                saveStateToFirestore(); // Guardar el progreso de las tarjetas
+                saveStateToFirestore();
             });
             return;
         }
         
-        // Mostrar tarjeta actual
         studyProgress.textContent = `Progreso: ${currentCardIndex} / ${cardsToReview.length}`;
         const currentCard = cardsToReview[currentCardIndex];
         
-        // Mostrar pregunta
         studyQuestionImg.src = currentCard.questionImg || '';
         studyQuestionImg.classList.toggle('hidden', !currentCard.questionImg);
         studyQuestionTextEl.textContent = currentCard.question;
@@ -825,33 +771,29 @@ document.addEventListener('DOMContentLoaded', () => {
         studyAnswerImg.src = '';
         studyAnswerImg.classList.add('hidden');
         
-        // --- ¡¡AQUÍ ESTABA EL ERROR!! ---
-        // studyAnswerTextEl.textContent = currentCard.question; // <-- ERROR ANTIGUO
-        studyAnswerTextEl.textContent = currentCard.answer; // <-- ¡CORREGIDO!
+        // --- ¡LA CORRECCIÓN ESTÁ AQUÍ! ---
+        // (Asegurándonos de que la respuesta correcta se carga en el elemento de respuesta)
+        studyAnswerTextEl.textContent = currentCard.answer;
         // --- --- ---
         
         studyAnswerImg.onerror = () => { studyAnswerImg.classList.add('hidden'); };
         studyQuestionImg.onerror = () => { studyQuestionImg.classList.add('hidden'); };
 
-        // Ocultar respuesta y botones de dificultad
         studyAnswerTextEl.parentElement.classList.add('hidden');
         studyDifficultyBtns.classList.add('hidden');
         
-        // Mostrar botón "Mostrar Respuesta"
         showAnswerBtn.classList.remove('hidden');
-        studyCard.classList.remove('hidden'); // Asegurarse de que la tarjeta esté visible
+        studyCard.classList.remove('hidden');
     }
 
     showAnswerBtn.addEventListener('click', () => {
         const { cardsToReview, currentCardIndex } = state.studySession;
         const currentCard = cardsToReview[currentCardIndex];
         
-        // Mostrar respuesta
         studyAnswerImg.src = currentCard.answerImg || '';
         studyAnswerImg.classList.toggle('hidden', !currentCard.answerImg);
         studyAnswerTextEl.parentElement.classList.remove('hidden');
         
-        // Ocultar botón "Mostrar Respuesta" y mostrar dificultad
         showAnswerBtn.classList.add('hidden');
         studyDifficultyBtns.classList.remove('hidden');
     });
@@ -863,7 +805,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const { cardsToReview, currentCardIndex } = state.studySession;
         const card = cardsToReview[currentCardIndex];
 
-        // --- Lógica de Repetición Espaciada (SM-2 Simplificado) ---
         let { interval, easeFactor } = card;
         interval = interval || 0;
         easeFactor = easeFactor || 2.5;
@@ -877,18 +818,16 @@ document.addEventListener('DOMContentLoaded', () => {
             state.points += 3;
         } else if (difficulty === 'good') {
             nextInterval = getNextInterval(interval, 'good');
-            // easeFactor no cambia
             state.points += 2;
-        } else { // 'hard'
-            nextInterval = 0; // Repetir pronto
-            newEaseFactor = Math.max(1.3, easeFactor - 0.2); // Reducir facilidad
+        } else {
+            nextInterval = 0;
+            newEaseFactor = Math.max(1.3, easeFactor - 0.2);
             state.points += 1;
         }
         
         const nextReviewDate = new Date(getTodayString() + 'T00:00:00');
         nextReviewDate.setDate(nextReviewDate.getDate() + nextInterval);
         
-        // Actualizar la tarjeta original en el mazo (deck)
         const deck = state.decks.find(d => d.id === state.currentDeckId);
         const cardInDeck = deck.cards.find(c => c.id === card.id);
         if (cardInDeck) {
@@ -897,24 +836,21 @@ document.addEventListener('DOMContentLoaded', () => {
             cardInDeck.nextReviewDate = nextReviewDate.toISOString().split('T')[0];
         }
 
-        // Avanzar a la siguiente tarjeta
         state.studySession.currentCardIndex++;
         renderStudyView();
-        // El guardado se hace al final de la sesión
     });
     
     function getNextInterval(lastInterval, difficulty) {
-        if (difficulty === 'hard') return 1; // Revisar mañana
+        if (difficulty === 'hard') return 1;
         if (lastInterval === 0) {
              return (difficulty === 'easy') ? 4 : 1;
         }
         if (lastInterval === 1) {
             return (difficulty === 'easy') ? 7 : 3;
         }
-        // Lógica simple de duplicar
         let next = lastInterval * 2;
         if (difficulty === 'easy') next += 1;
-        return Math.min(next, 60); // Máximo 2 meses
+        return Math.min(next, 60);
     }
     
 
@@ -931,11 +867,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const deck = state.decks.find(d => d.id === state.currentDeckId);
         if (!deck || deck.cards.length < 4) return;
 
-        logStudyActivity(); // ¡Registrar actividad!
+        logStudyActivity();
 
-        // Barajar las tarjetas y seleccionarlas (todas o un máximo)
         const shuffledCards = [...deck.cards].sort(() => Math.random() - 0.5);
-        // const selectedCards = shuffledCards.slice(0, 10); // Límite de 10 preguntas (opcional)
         const selectedCards = shuffledCards;
 
         quizState.questions = selectedCards.map(card => {
@@ -952,7 +886,6 @@ document.addEventListener('DOMContentLoaded', () => {
     function generateQuizQuestion(correctCard, allCards) {
         let options = [correctCard.answer];
         
-        // Obtener 3 respuestas incorrectas aleatorias
         const incorrectCards = allCards.filter(c => c.id !== correctCard.id);
         const shuffledIncorrect = incorrectCards.sort(() => Math.random() - 0.5);
         
@@ -960,7 +893,6 @@ document.addEventListener('DOMContentLoaded', () => {
             options.push(shuffledIncorrect[i].answer);
         }
 
-        // Barajar las opciones
         options.sort(() => Math.random() - 0.5);
 
         return {
@@ -985,7 +917,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const { questions, currentQuestionIndex } = quizState;
 
         if (currentQuestionIndex >= questions.length) {
-            // Quiz terminado
             const scorePercent = (quizState.score / questions.length) * 100;
             quizQuestionText.textContent = '¡Quiz completado!';
             quizOptionsList.innerHTML = `
@@ -996,10 +927,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     Volver al Dashboard
                 </button>
             `;
-            // Añadir listener
             document.getElementById('finish-quiz-btn').addEventListener('click', () => {
                 navigate(VIEWS.DASHBOARD);
-                saveStateToFirestore(); // Guardar puntos
+                saveStateToFirestore();
             });
             return;
         }
@@ -1027,11 +957,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const answer = selectedOption.textContent;
         const question = quizState.questions[quizState.currentQuestionIndex];
         
-        // Deshabilitar todas las opciones
         quizOptionsList.querySelectorAll('.quiz-option').forEach(btn => {
             btn.disabled = true;
             btn.classList.add('opacity-70');
-            // Marcar la correcta y la incorrecta
             if (btn.textContent === question.correctAnswer) {
                 btn.classList.remove('bg-slate-700', 'hover:bg-slate-600');
                 btn.classList.add('bg-green-700');
@@ -1046,7 +974,6 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             quizFeedback.textContent = `Incorrecto. La respuesta era: ${question.correctAnswer}`;
             quizFeedback.className = 'p-3 rounded-lg bg-red-900 text-red-200 mt-4';
-            // Marcar la que seleccionó el usuario
             selectedOption.classList.remove('bg-slate-700', 'opacity-70');
             selectedOption.classList.add('bg-red-700');
         }
@@ -1080,20 +1007,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function startPomodoro() {
-        if (state.pomodoro.isRunning) { // Pausar
+        if (state.pomodoro.isRunning) {
             clearInterval(state.pomodoro.timer);
             state.pomodoro.isRunning = false;
-            state.pomodoro.endTime = null; // Limpiar endTime al pausar
-        } else { // Iniciar o Reanudar
+            state.pomodoro.endTime = null;
+        } else {
             state.pomodoro.isRunning = true;
             
-            // Si no hay un endTime (no es una reanudación) o el endTime es inválido,
-            // establecer uno nuevo.
             if (!state.pomodoro.endTime || state.pomodoro.endTime <= Date.now()) {
                  state.pomodoro.endTime = Date.now() + (state.pomodoro.timeLeft * 1000);
             }
-            // Si sí hay un endTime (es una reanudación de una recarga de página),
-            // lo usamos tal cual y actualizamos timeLeft
             else {
                 state.pomodoro.timeLeft = Math.round((state.pomodoro.endTime - Date.now()) / 1000);
             }
@@ -1111,7 +1034,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }, 1000);
         }
         updatePomodoroUI();
-        // No guardamos el estado aquí para no escribir en DB cada segundo
     }
     
     function handlePomodoroFinish() {
@@ -1122,22 +1044,20 @@ document.addEventListener('DOMContentLoaded', () => {
         playPomodoroSound(state.pomodoro.isBreak);
 
         if (state.pomodoro.isBreak) {
-            // Termina el descanso
             state.pomodoro.isBreak = false;
             state.pomodoro.timeLeft = 25 * 60;
             showNotification("¡Descanso terminado! Es hora de enfocarse.");
         } else {
-            // Termina la sesión de estudio
             state.pomodoro.isBreak = true;
             state.pomodoro.timeLeft = 5 * 60;
             state.points += 25;
             state.studyTimeMinutes += 25;
-            logStudyActivity(); // ¡Registrar actividad!
+            logStudyActivity();
             showNotification("¡Pomodoro completado! +25 puntos. ¡Toma un descanso!");
         }
         
         updatePomodoroUI();
-        saveStateToFirestore(); // Guardar el estado al finalizar una etapa
+        saveStateToFirestore();
     }
 
     function resetPomodoro() {
@@ -1151,12 +1071,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     function checkRunningPomodoro() {
-        // Si la página se recargó y había un temporizador corriendo...
         if (state.pomodoro.endTime && state.pomodoro.endTime > Date.now()) {
             state.pomodoro.timeLeft = Math.round((state.pomodoro.endTime - Date.now()) / 1000);
-            startPomodoro(); // Reanuda el temporizador
+            startPomodoro();
         } else if (state.pomodoro.endTime && state.pomodoro.endTime <= Date.now()) {
-            // El temporizador terminó mientras la pestaña estaba cerrada
             handlePomodoroFinish();
         }
     }
@@ -1179,11 +1097,10 @@ document.addEventListener('DOMContentLoaded', () => {
         setTimeout(() => {
             notification.classList.remove('opacity-100', '-translate-y-4');
             notification.classList.add('opacity-0', 'translate-y-full');
-            setTimeout(() => notification.classList.add('hidden'), 500); // Ocultar después de la transición
+            setTimeout(() => notification.classList.add('hidden'), 500);
         }, 3000);
     }
     
-    // Web Audio API para sonidos (sin archivos externos)
     let audioCtx;
     function playPomodoroSound(isBreak) {
         try {
@@ -1197,14 +1114,14 @@ document.addEventListener('DOMContentLoaded', () => {
             gainNode.connect(audioCtx.destination);
             
             oscillator.type = 'sine';
-            // Tono diferente para el descanso
             oscillator.frequency.setValueAtTime(isBreak ? 660 : 440, audioCtx.currentTime); 
             gainNode.gain.setValueAtTime(0.5, audioCtx.currentTime);
             
             oscillator.start(audioCtx.currentTime);
-            oscillator.stop(audioCtx.currentTime + 0.5); // Sonido de 0.5 seg
+            oscillator.stop(audioCtx.currentTime + 0.5);
         } catch (e) {
             console.error("Error al reproducir sonido:", e);
         }
     }
 });
+
