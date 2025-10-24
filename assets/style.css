@@ -1,0 +1,25 @@
+/* Estilo base con la fuente Inter */
+body {
+  font-family: "Inter", sans-serif;
+}
+/* Clase para ocultar/mostrar vistas */
+.view {
+  display: none;
+}
+
+/* Estilos para la tarjeta de flashcard (efecto de volteo) */
+.flashcard-inner {
+  transition: transform 0.6s;
+  transform-style: preserve-3d;
+}
+.flashcard.is-flipped .flashcard-inner {
+  transform: rotateY(180deg);
+}
+.flashcard-front,
+.flashcard-back {
+  -webkit-backface-visibility: hidden; /* Safari */
+  backface-visibility: hidden;
+}
+.flashcard-back {
+  transform: rotateY(180deg);
+}
