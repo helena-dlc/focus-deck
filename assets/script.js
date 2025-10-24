@@ -148,10 +148,10 @@ let confirmCallback = null;
 // INICIALIZACIÓN
 // ====================================
 document.addEventListener('DOMContentLoaded', () => {
-    initializeApp();
+    initializeApplication();
 });
-
-function initializeApp() {
+//cambio en declaración 
+function initializeApplication() {
     loginBtn?.addEventListener('click', signInWithGoogle);
     addDeckBtn?.addEventListener('click', () => {
         newDeckModal.classList.remove('hidden');
