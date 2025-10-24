@@ -1,4 +1,4 @@
-console.log("--- SCRIPT DE FOCUS DECK v4 CARGADO ---"); // <-- v4!
+console.log("--- SCRIPT DE FOCUS DECK v7 CARGADO (Visibilidad Estándar) ---"); // <-- v7!
 
 // --- IMPORTACIONES DE FIREBASE ---
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -7,7 +7,8 @@ import {
     getAuth,
     onAuthStateChanged,
     GoogleAuthProvider,
-    signInWithPopup,
+    signInWithRedirect, // Usando redirect
+    getRedirectResult,
     signOut
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
@@ -18,13 +19,13 @@ import {
     Timestamp,
     updateDoc,
     arrayUnion,
-    getDoc // Necesario para la carga inicial robusta
+    getDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 
 // --- CONFIGURACIÓN DE FIREBASE ---
 const firebaseConfig = {
-  apiKey: "AIzaSyC6tqffatZ7NhMm5bGRh0kmjCLymj0DD74", // Asegúrate que esta sigue siendo tu clave correcta
+  apiKey: "AIzaSyC6tqffatZ7NhMm5bGRh0kmjCLymj0DD74",
   authDomain: "focus-deck.firebaseapp.com",
   projectId: "focus-deck",
   storageBucket: "focus-deck.firebasestorage.app",
@@ -42,6 +43,8 @@ const db = getFirestore(app);
 // --- ESTADO GLOBAL ---
 let currentUserId = null;
 let unsubscribeFromFirestore = null;
+let isInitialLoadComplete = false; // Flag para controlar la carga inicial
+
 const defaultState = {
     points: 0,
     decks: [],
@@ -51,103 +54,101 @@ const defaultState = {
     currentView: 'dashboard-view',
     currentDeckId: null,
     pomodoro: {
-        timer: null,
-        timeLeft: 25 * 60,
-        isBreak: false,
-        isRunning: false,
-        endTime: null,
+        timer: null, timeLeft: 25 * 60, isBreak: false, isRunning: false, endTime: null,
     },
     studySession: {
-        cardsToReview: [],
-        currentCardIndex: 0,
-        correctAnswers: 0,
-        sessionPoints: 0,
+        cardsToReview: [], currentCardIndex: 0, correctAnswers: 0,
     }
 };
-let state = { ...defaultState };
+// Usar copia profunda para evitar mutaciones accidentales del defaultState
+let state = JSON.parse(JSON.stringify(defaultState));
+
 
 document.addEventListener('DOMContentLoaded', () => {
-    lucide.createIcons();
+    // Inicializar iconos al cargar el DOM
+    if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+    } else {
+        console.warn("Lucide library not loaded yet.");
+    }
 
     const VIEWS = {
         DASHBOARD: 'dashboard-view',
         STUDY: 'study-view',
-        MANAGE: 'deck-manage-view',
+        MANAGE: 'manage-deck-view',
         QUIZ: 'quiz-view',
     };
 
     // --- Elementos del DOM ---
+    // Intentar obtener todas las referencias de forma segura
     const views = document.querySelectorAll('.view');
-    const dashboardView = document.getElementById('dashboard-view');
-    const studyView = document.getElementById('study-view');
-    const manageDeckView = document.getElementById('deck-manage-view');
-    const quizView = document.getElementById('quiz-view');
-    const authContainer = document.getElementById('auth-container');
     const loginView = document.getElementById('login-view');
     const mainContent = document.getElementById('main-content');
     const loginBtn = document.getElementById('login-btn');
-    
-    // Elementos del dashboard
+    const authContainer = document.getElementById('auth-container');
+    const dashboardView = document.getElementById('dashboard-view');
+    const studyView = document.getElementById('study-view');
+    const manageDeckView = document.getElementById('manage-deck-view');
+    const quizView = document.getElementById('quiz-view');
     const pomodoroTimerEl = document.getElementById('pomodoro-timer');
-    const startPomodoroBtn = document.getElementById('start-pomodoro');
-    const resetPomodoroBtn = document.getElementById('reset-pomodoro');
-    const taskInput = document.getElementById('new-task-input'); // CORREGIDO: era 'task-input'
+    const startPomodoroBtn = document.getElementById('start-pomodoro-btn');
+    const resetPomodoroBtn = document.getElementById('reset-pomodoro-btn');
+    const taskInput = document.getElementById('task-input');
     const taskPriority = document.getElementById('task-priority');
     const addTaskBtn = document.getElementById('add-task-btn');
     const taskList = document.getElementById('task-list');
-    const addDeckBtn = document.getElementById('add-deck-btn');
+    const newDeckBtn = document.getElementById('new-deck-btn');
     const deckList = document.getElementById('deck-list');
+    const noDecksMessage = document.getElementById('no-decks-message');
     const streakEl = document.getElementById('streak-days');
     const studyTimeEl = document.getElementById('study-time');
     const totalDomainEl = document.getElementById('total-domain');
     const domainByDeckList = document.getElementById('domain-by-deck-list');
-    
-    // Elementos de gestión de deck
-    const manageDeckTitle = document.getElementById('manage-deck-name');
+    const manageDeckTitle = document.getElementById('manage-deck-title');
     const cardList = document.getElementById('card-list');
-    const cardQuestionInput = document.getElementById('new-card-question');
-    const cardAnswerInput = document.getElementById('new-card-answer');
-    const cardQuestionImgInput = document.getElementById('new-card-question-img');
-    const cardAnswerImgInput = document.getElementById('new-card-answer-img');
-    const addCardToDeckBtn = document.getElementById('add-card-to-deck-btn');
+    const addCardForm = document.getElementById('add-card-form');
+    const cardQuestionInput = document.getElementById('card-question');
+    const cardAnswerInput = document.getElementById('card-answer');
+    const cardQuestionImgInput = document.getElementById('card-question-img');
+    const cardAnswerImgInput = document.getElementById('card-answer-img');
     const deleteDeckBtn = document.getElementById('delete-deck-btn');
-    
-    // Elementos de estudio
     const studyDeckTitle = document.getElementById('study-deck-title');
     const studyProgress = document.getElementById('study-progress');
     const studyCard = document.getElementById('study-card');
-    const cardFront = document.getElementById('card-front');
-    const cardBack = document.getElementById('card-back');
+    const studyQuestionImg = document.getElementById('study-question-img');
+    const studyQuestionTextEl = document.getElementById('study-question-text');
+    const studyAnswerImg = document.getElementById('study-answer-img');
+    const studyAnswerTextEl = document.getElementById('study-answer-text');
     const showAnswerBtn = document.getElementById('show-answer-btn');
-    const studyControlsShow = document.getElementById('study-controls-show');
-    const studyControlsRate = document.getElementById('study-controls-rate');
-    const studyComplete = document.getElementById('study-complete');
-    const finishSessionBtn = document.getElementById('finish-session-btn');
-    
-    // Elementos de quiz
-    const quizDeckTitle = document.getElementById('quiz-deck-name');
-    const quizContainer = document.getElementById('quiz-container');
-    const quizResults = document.getElementById('quiz-results');
-    const finishQuizBtn = document.getElementById('finish-quiz-btn');
-    
-    // Modales
-    const newDeckModal = document.getElementById('new-deck-modal');
-    const newDeckNameInput = document.getElementById('new-deck-name');
-    const saveDeckModalBtn = document.getElementById('save-deck-modal');
-    const cancelDeckModalBtn = document.getElementById('cancel-deck-modal');
-    const notificationModal = document.getElementById('notification-modal');
-    const notificationText = document.getElementById('notification-text');
-    const notificationOkBtn = document.getElementById('notification-ok-btn');
+    const studyDifficultyBtns = document.getElementById('study-difficulty-btns');
+    const quizDeckTitle = document.getElementById('quiz-deck-title');
+    const quizProgress = document.getElementById('quiz-progress');
+    const quizQuestionText = document.getElementById('quiz-question-text');
+    const quizOptionsList = document.getElementById('quiz-options');
+    const quizFeedback = document.getElementById('quiz-feedback');
+    const nextQuizQuestionBtn = document.getElementById('next-quiz-question-btn');
+    const notification = document.getElementById('notification');
+    const confirmModal = document.getElementById('confirm-modal');
+    const confirmText = document.getElementById('confirm-text');
+    const confirmCancelBtn = document.getElementById('confirm-cancel-btn');
+    const confirmOkBtn = document.getElementById('confirm-ok-btn');
+
 
     // --- Navegación ---
     document.getElementById('back-to-dashboard-study')?.addEventListener('click', () => navigate(VIEWS.DASHBOARD));
     document.getElementById('back-to-dashboard-manage')?.addEventListener('click', () => navigate(VIEWS.DASHBOARD));
     document.getElementById('back-to-dashboard-quiz')?.addEventListener('click', () => navigate(VIEWS.DASHBOARD));
 
-    // --- State Management & Persistence ---
+
+    // --- State Management & Persistence (v7) ---
+
+    // Guarda el estado local completo en Firestore
     async function saveStateToFirestore() {
-        if (!currentUserId) return;
-        console.log("Guardando estado para:", currentUserId, state);
+        if (!currentUserId || !isInitialLoadComplete) {
+             console.warn("Guardado cancelado: No hay usuario o carga inicial incompleta.");
+             return;
+        }
+        console.log("Intentando guardar estado v7 para:", currentUserId);
         try {
             const stateToSave = JSON.parse(JSON.stringify(state));
             delete stateToSave.pomodoro?.timer;
@@ -163,38 +164,35 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (nextReviewDateTS && typeof nextReviewDateTS === 'string') {
                         try {
                             const date = new Date(nextReviewDateTS + 'T00:00:00Z');
-                            if (!isNaN(date.getTime())) {
-                                nextReviewDateTS = Timestamp.fromDate(date);
-                            } else {
-                                nextReviewDateTS = Timestamp.fromDate(new Date());
-                            }
-                        } catch (e) {
-                            console.error("Error convirtiendo nextReviewDate a Timestamp:", e);
-                            nextReviewDateTS = Timestamp.fromDate(new Date());
-                        }
-                    } else if (!nextReviewDateTS) {
-                        nextReviewDateTS = Timestamp.fromDate(new Date());
+                            if (!isNaN(date.getTime())) nextReviewDateTS = Timestamp.fromDate(date);
+                            else nextReviewDateTS = Timestamp.now();
+                        } catch (e) { nextReviewDateTS = Timestamp.now(); }
+                    } else if (!(nextReviewDateTS instanceof Timestamp)) {
+                        nextReviewDateTS = Timestamp.now();
                     }
-                    return { ...card, nextReviewDate: nextReviewDateTS };
+                    const questionImg = card.questionImg || null;
+                    const answerImg = card.answerImg || null;
+                    return { ...card, nextReviewDate: nextReviewDateTS, questionImg, answerImg };
                 })
             }));
 
+            console.log("Estado v7 listo para guardar:", stateToSave);
             const userDocRef = doc(db, "users", currentUserId);
-            await setDoc(userDocRef, stateToSave, { merge: true });
-            console.log("Estado guardado exitosamente en Firestore");
+            await setDoc(userDocRef, stateToSave); // Sobrescribir documento
+            console.log("Estado v7 guardado.");
         } catch (error) {
-            console.error("Error guardando estado:", error);
-            showNotification("Error guardando datos. Verifica tu conexión.");
+            console.error("Error CRÍTICO guardando estado v7: ", error);
+            showNotification("Error MUY GRAVE al guardar tu progreso.");
         }
     }
 
+    // Procesa datos crudos de Firestore al estado local usable
     function processLoadedData(data) {
-        console.log("Procesando datos cargados:", data);
+        console.log("Procesando datos crudos v7:", data);
         const loadedState = { ...defaultState, ...data };
 
         loadedState.pomodoro = { ...defaultState.pomodoro, ...(loadedState.pomodoro || {}) };
-        loadedState.pomodoro.isRunning = false;
-        loadedState.pomodoro.timer = null;
+        loadedState.pomodoro.isRunning = false; loadedState.pomodoro.timer = null;
         loadedState.studySession = defaultState.studySession;
 
         loadedState.decks = Array.isArray(loadedState.decks) ? loadedState.decks : [];
@@ -205,103 +203,134 @@ document.addEventListener('DOMContentLoaded', () => {
             ...deck,
             cards: (Array.isArray(deck.cards) ? deck.cards : []).map(card => {
                 let nextReviewDateStr = card.nextReviewDate;
-                if (nextReviewDateStr && nextReviewDateStr.toDate) {
+                if (nextReviewDateStr && typeof nextReviewDateStr.toDate === 'function') {
                     try {
-                        nextReviewDateStr = nextReviewDateStr.toDate().toISOString().split('T')[0];
+                        const date = nextReviewDateStr.toDate();
+                        nextReviewDateStr = date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
                     } catch (e) { nextReviewDateStr = getTodayString(); }
-                } else if (typeof nextReviewDateStr !== 'string' || isNaN(new Date(nextReviewDateStr + 'T00:00:00Z').getTime())) {
+                } else if (typeof nextReviewDateStr !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(nextReviewDateStr)) {
                     nextReviewDateStr = getTodayString();
                 }
-                const questionImg = card.questionImg || null;
-                const answerImg = card.answerImg || null;
+                 const questionImg = card.questionImg || null;
+                 const answerImg = card.answerImg || null;
                 return { ...card, nextReviewDate: nextReviewDateStr, questionImg, answerImg };
             })
         }));
-        console.log("Estado procesado final:", loadedState);
+        console.log("Estado procesado v7:", loadedState);
         return loadedState;
     }
 
+    // Listener de Firestore (onSnapshot) para cambios en tiempo real
     function listenToUserData(userId) {
         if (unsubscribeFromFirestore) unsubscribeFromFirestore();
-
         const userDocRef = doc(db, "users", userId);
-        console.log("Estableciendo listener onSnapshot para usuario:", userId);
+        console.log("Estableciendo listener onSnapshot v7 para:", userId);
 
         unsubscribeFromFirestore = onSnapshot(userDocRef, (docSnap) => {
-            console.log("Recibido snapshot de Firestore. Existe:", docSnap.exists());
-            if (docSnap.exists()) {
+            console.log("Snapshot v7 recibido. Existe:", docSnap.exists());
+            if (isInitialLoadComplete && docSnap.exists()) {
                 state = processLoadedData(docSnap.data());
-            } else {
-                console.log("Documento no existe en Firestore para el usuario. Usando estado por defecto.");
-                state = { ...defaultState };
+                console.log("Estado local actualizado desde Firestore via onSnapshot v7.");
+                render(); // Re-renderizar UI con los datos actualizados
+            } else if (isInitialLoadComplete && !docSnap.exists()) {
+                 console.warn("Documento dejó de existir. Volviendo a default.");
+                 state = JSON.parse(JSON.stringify(defaultState));
+                 render();
+            } else if (!isInitialLoadComplete) {
+                 console.log("Snapshot v7 ignorado (carga inicial no completa).");
             }
-            render();
-            checkRunningPomodoro();
         }, (error) => {
-            console.error("Error en listener onSnapshot: ", error);
-            showNotification("Error al sincronizar datos. Intenta recargar.");
+            console.error("Error en listener onSnapshot v7: ", error);
+            showNotification("Error al sincronizar datos.");
         });
     }
 
+    // Registra actividad de estudio para la racha
     async function logStudyActivity() {
         const today = getTodayString();
         if (!Array.isArray(state.studyLog)) state.studyLog = [];
         if (!state.studyLog.includes(today)) {
-            console.log("Registrando actividad de estudio para racha.");
+            console.log("Registrando actividad de estudio para racha v7.");
             state.studyLog.push(today);
-
             if (currentUserId) {
                 try {
                     const userDocRef = doc(db, "users", currentUserId);
                     await updateDoc(userDocRef, { studyLog: arrayUnion(today) });
-                    console.log("StudyLog actualizado en Firestore.");
-                } catch(e) {
-                    console.error("Error actualizando studyLog con arrayUnion: ", e);
-                    await saveStateToFirestore();
-                }
+                    console.log("StudyLog actualizado en Firestore v7.");
+                } catch(e) { await saveStateToFirestore(); }
             }
             renderStats();
         }
     }
 
-    // --- Lógica de Autenticación ---
+
+    // --- Lógica de Autenticación (v7 - redirect y carga inicial robusta) ---
+
+     // Procesar redirect al volver de Google
+     getRedirectResult(auth)
+        .then((result) => {
+            if (result) {
+                console.log("Resultado de redirect v7 procesado:", result.user.uid);
+            } else {
+                 console.log("No hay resultado de redirect v7 pendiente.");
+            }
+        }).catch((error) => {
+            console.error("Error procesando redirect v7:", error);
+            showNotification("Error al completar inicio de sesión.");
+        });
+
+    // Listener principal de cambio de estado de autenticación
     onAuthStateChanged(auth, (user) => {
-        console.log("Auth state changed. User:", user ? user.uid : 'null');
-        if (user) {
+        console.log("Auth state v7 changed. User:", user ? user.uid : 'null');
+        isInitialLoadComplete = false; // Resetear flag
+
+        if (user) { // Usuario Logueado
             currentUserId = user.uid;
-            
-            // Mostrar app, ocultar login
-            if (loginView) {
-                loginView.style.display = 'none';
-            }
-            if (mainContent) {
-                mainContent.classList.remove('hidden');
-            }
+            if (loginView) loginView.classList.add('hidden');
+            if (mainContent) mainContent.classList.remove('hidden');
 
-            updateAuthUI(user);
-            listenToUserData(currentUserId);
+            // Cargar datos iniciales UNA VEZ con getDoc
+            const userDocRef = doc(db, "users", currentUserId);
+            console.log("Intentando cargar datos iniciales con getDoc para:", currentUserId);
+            getDoc(userDocRef).then(docSnap => {
+                if (docSnap.exists()) {
+                    console.log("getDoc encontró datos existentes.");
+                    state = processLoadedData(docSnap.data());
+                } else {
+                    console.log("getDoc no encontró datos. Usuario nuevo. Guardando estado inicial.");
+                    state = JSON.parse(JSON.stringify(defaultState));
+                    saveStateToFirestore(); // Guardar estado inicial para el nuevo usuario
+                }
+                isInitialLoadComplete = true; // Marcar carga como completa
+                console.log("Carga inicial completa. Renderizando UI.");
+                render(); // Renderizar AHORA
+                updateAuthUI(user); // Actualizar header AHORA
+                listenToUserData(currentUserId); // Empezar a escuchar cambios DESPUÉS
+                checkRunningPomodoro(); // Revisar pomodoro AHORA
+            }).catch(error => {
+                console.error("Error CRÍTICO cargando datos iniciales con getDoc v7:", error);
+                showNotification("Error muy grave al cargar tus datos. Intenta recargar.");
+                 state = JSON.parse(JSON.stringify(defaultState)); // Fallback
+                 isInitialLoadComplete = true;
+                 render();
+                 updateAuthUI(user);
+                 listenToUserData(currentUserId);
+                 checkRunningPomodoro();
+            });
 
-        } else {
+        } else { // Usuario Deslogueado
             currentUserId = null;
-            
-            // Mostrar login, ocultar app
-            if (loginView) {
-                loginView.style.display = 'block';
-            }
-            if (mainContent) {
-                mainContent.classList.add('hidden');
-            }
-
+            if (loginView) loginView.classList.remove('hidden');
+            if (mainContent) mainContent.classList.add('hidden');
             updateAuthUI(null);
-
-            if (unsubscribeFromFirestore) {
-                unsubscribeFromFirestore();
-                unsubscribeFromFirestore = null;
-            }
-            state = { ...defaultState };
+            if (unsubscribeFromFirestore) unsubscribeFromFirestore(); unsubscribeFromFirestore = null;
+            state = JSON.parse(JSON.stringify(defaultState));
+            isInitialLoadComplete = false;
+            render();
         }
     });
 
+    // Actualizar header (revisado)
     function updateAuthUI(user) {
         if (!authContainer) return;
         if (user) {
@@ -309,770 +338,504 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="flex items-center gap-2">
                     <span id="points" class="text-sm font-semibold text-yellow-400 bg-slate-700 px-3 py-1 rounded-full">${state?.points ?? 0} pts</span>
                     <img id="user-profile-pic" src="${user.photoURL || 'https://placehold.co/40x40/7f7f7f/ffffff?text=?'}" alt="User" class="w-8 h-8 rounded-full border-2 border-slate-500">
-                    <button id="logout-btn-dynamic" class="p-1 text-slate-400 hover:text-white">
-                        <i data-lucide="log-out" class="w-5 h-5"></i>
-                    </button>
-                </div>
-            `;
-            lucide.createIcons();
-            const dynamicLogoutBtn = document.getElementById('logout-btn-dynamic');
-            if (dynamicLogoutBtn) {
-                dynamicLogoutBtn.addEventListener('click', logout);
-            }
+                    <button id="logout-btn-dynamic" class="p-1 text-slate-400 hover:text-white"> <i data-lucide="log-out" class="w-5 h-5"></i> </button>
+                </div>`;
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+            document.getElementById('logout-btn-dynamic')?.removeEventListener('click', logout); // Limpiar anterior
+            document.getElementById('logout-btn-dynamic')?.addEventListener('click', logout);
         } else {
-            authContainer.innerHTML = '';
+            authContainer.innerHTML = ''; // Limpiar si no hay usuario
         }
-    }
+     }
 
-    async function loginWithGoogle() {
+     // Login con redirect
+     async function loginWithGoogle() {
         const provider = new GoogleAuthProvider();
         try {
-            console.log("Iniciando popup de login...");
-            await signInWithPopup(auth, provider);
+            console.log("Iniciando signInWithRedirect v7...");
+            await signInWithRedirect(auth, provider);
         } catch (error) {
-            console.error("Error al iniciar sesión: ", error);
-            let errorMessage = "Error al iniciar sesión. ";
-            if (error.code === 'auth/popup-blocked') {
-                errorMessage += "Popup bloqueado. Habilítalos.";
-            } else if (error.code === 'auth/popup-closed-by-user') {
-                errorMessage = null;
-            } else {
-                errorMessage += "Inténtalo de nuevo.";
-            }
-            if (errorMessage) showNotification(errorMessage);
+            console.error("Error al iniciar signInWithRedirect v7: ", error);
+            showNotification("Error al intentar iniciar sesión.");
         }
     }
 
-    async function logout() {
-        try {
-            await signOut(auth);
-            showNotification("Sesión cerrada.");
-        } catch (error) {
-            console.error("Error al cerrar sesión: ", error);
-            showNotification("Error al cerrar sesión.");
-        }
-    }
+     // Logout
+     async function logout() {
+         try { await signOut(auth); showNotification("Sesión cerrada."); }
+         catch (error) { console.error("Error al cerrar sesión v7: ", error); showNotification("Error al cerrar sesión."); }
+     }
 
-    if (loginBtn) {
-        loginBtn.addEventListener('click', loginWithGoogle);
-    }
+    // Listener botón login inicial
+    if (loginBtn) loginBtn.addEventListener('click', loginWithGoogle);
+
 
     // --- Lógica de la App ---
+
+    // Navegación SIMPLIFICADA
     function navigate(viewId) {
-        state.currentView = viewId;
-        render();
-    }
-
-    function render() {
-        if (!views || !state) return;
-        console.log("Renderizando vista:", state.currentView, "con estado:", state);
-
-        views.forEach(v => v.classList.remove('active'));
-
-        switch (state.currentView) {
-            case VIEWS.DASHBOARD:
-                if (dashboardView) {
-                    dashboardView.classList.add('active');
-                    renderDashboard();
-                }
-                break;
-            case VIEWS.MANAGE:
-                if (manageDeckView) {
-                    manageDeckView.classList.add('active');
-                    renderManageView();
-                }
-                break;
-            case VIEWS.STUDY:
-                if (studyView) {
-                    studyView.classList.add('active');
-                    renderStudyView();
-                }
-                break;
-            case VIEWS.QUIZ:
-                if (quizView) {
-                    quizView.classList.add('active');
-                    renderQuizView();
-                }
-                break;
-            default:
-                if (dashboardView) {
-                    dashboardView.classList.add('active');
-                    renderDashboard();
-                }
+        if (!state || !isInitialLoadComplete) {
+            console.warn("Navegación cancelada: Estado no listo."); return;
         }
+        console.log("Navegando a:", viewId);
+        state.currentView = viewId; // Actualizar estado
 
-        // Actualizar puntos en el header
-        const pointsDisplay = document.getElementById('points');
-        if (pointsDisplay) pointsDisplay.textContent = `${state.points || 0} pts`;
+        // Ocultar TODAS las vistas
+        views.forEach(v => v.classList.add('hidden'));
 
-        updatePomodoroUI();
+        // Mostrar la vista correcta y renderizar su contenido
+        const targetView = document.getElementById(viewId);
+        if (targetView) {
+            targetView.classList.remove('hidden');
+            console.log("Mostrando vista:", viewId);
+            // Renderizar contenido específico AHORA
+             if (viewId === VIEWS.DASHBOARD) renderDashboard();
+             else if (viewId === VIEWS.MANAGE) renderManageView();
+             else if (viewId === VIEWS.STUDY) renderStudyView();
+             else if (viewId === VIEWS.QUIZ) renderQuizView();
+        } else {
+            console.error(`Vista no encontrada: ${viewId}. Mostrando Dashboard.`);
+             if(dashboardView) dashboardView.classList.remove('hidden');
+             state.currentView = VIEWS.DASHBOARD;
+             renderDashboard();
+        }
         if (typeof lucide !== 'undefined') lucide.createIcons();
     }
 
+    // Render principal - Llama a renders específicos y actualiza UI común
+    function render() {
+        if (!state || !isInitialLoadComplete) {
+             console.warn("Render principal cancelado: Estado no listo."); return;
+        }
+        console.log("Render principal v7 ejecutado para vista:", state.currentView);
+
+        // Actualizar elementos comunes (Pomodoro y Header)
+        updatePomodoroUI();
+        if (auth.currentUser) updateAuthUI(auth.currentUser); // Actualizar puntos en header
+
+        // Asegurar visibilidad correcta (redundante con navigate pero seguro)
+        views.forEach(v => v.classList.toggle('hidden', v.id !== state.currentView));
+
+        // Renderizar contenido específico de la vista actual
+        if (state.currentView === VIEWS.DASHBOARD) renderDashboard();
+        else if (state.currentView === VIEWS.MANAGE) renderManageView();
+        else if (state.currentView === VIEWS.STUDY) renderStudyView();
+        else if (state.currentView === VIEWS.QUIZ) renderQuizView();
+
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+    }
+
+
+    // --- Render Dashboard ---
     function renderDashboard() {
-        console.log("Renderizando Dashboard...");
+        console.log("Renderizando Dashboard v7...");
         renderTaskList();
         renderDeckList();
         renderStats();
     }
-
+    // --- Lógica de Tareas ---
     function renderTaskList() {
-        if (!taskList) return;
-        const tasks = Array.isArray(state.tasks) ? state.tasks : [];
+        if (!taskList) { console.warn("Elemento taskList no encontrado."); return; }
+        console.log("Renderizando tareas v7:", state?.tasks);
         taskList.innerHTML = '';
-        
-        if (tasks.length === 0) {
-            taskList.innerHTML = '<p class="text-slate-400 text-center py-4">No hay tareas</p>';
-            return;
+        const tasksToRender = Array.isArray(state?.tasks) ? state.tasks : [];
+        if (tasksToRender.length === 0) {
+            taskList.innerHTML = '<p class="text-sm text-slate-400 px-3">No hay tareas pendientes.</p>'; return;
         }
-
-        tasks.sort((a, b) => a.priority - b.priority).forEach((task, index) => {
+        const priorityOrder = { 'Alta': 3, 'Media': 2, 'Baja': 1 };
+        const sortedTasks = [...tasksToRender].sort((a, b) => (priorityOrder[b.priority] || 0) - (priorityOrder[a.priority] || 0) || (b.id || 0) - (a.id || 0));
+        sortedTasks.forEach(task => {
             const taskEl = document.createElement('div');
-            taskEl.className = `task-item flex items-center gap-3 p-3 bg-dark-bg rounded-lg ${task.completed ? 'opacity-60' : ''}`;
-            
-            const priorityColors = {
-                1: 'bg-red-500',
-                2: 'bg-yellow-500',
-                3: 'bg-green-500'
-            };
-            
+            const priorityColor = { 'Alta': 'border-red-500', 'Media': 'border-yellow-500', 'Baja': 'border-teal-500' }[task.priority] || 'border-slate-500';
+            taskEl.className = `flex items-center justify-between p-3 bg-slate-800 rounded-lg border-l-4 ${priorityColor} mb-2 group`;
             taskEl.innerHTML = `
-                <div class="w-3 h-3 rounded-full ${priorityColors[task.priority] || 'bg-gray-500'}"></div>
-                <span class="flex-grow ${task.completed ? 'line-through text-slate-500' : ''}">${task.text}</span>
-                <button class="complete-task-btn text-primary hover:text-primary-dark" data-index="${index}">
-                    <i data-lucide="${task.completed ? 'rotate-ccw' : 'check'}" class="w-4 h-4"></i>
-                </button>
-                <button class="delete-task-btn text-red-400 hover:text-red-300" data-index="${index}">
-                    <i data-lucide="trash-2" class="w-4 h-4"></i>
-                </button>
-            `;
+                <div class="flex items-center flex-1 min-w-0 mr-2">
+                    <button data-task-id="${task.id}" class="complete-task-btn p-1 text-slate-400 hover:text-white mr-3 flex-shrink-0"> <i data-lucide="circle" class="w-5 h-5"></i> </button>
+                    <span class="text-slate-200 truncate" title="${task.text}">${task.text}</span>
+                </div>
+                <button data-task-id="${task.id}" class="delete-task-btn p-1 text-slate-500 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"> <i data-lucide="trash-2" class="w-4 h-4"></i> </button>`;
             taskList.appendChild(taskEl);
         });
-
-        taskList.querySelectorAll('.complete-task-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const index = parseInt(e.currentTarget.dataset.index);
-                if (state.tasks[index]) {
-                    state.tasks[index].completed = !state.tasks[index].completed;
-                    renderTaskList();
-                    saveStateToFirestore();
-                }
-            });
-        });
-
-        taskList.querySelectorAll('.delete-task-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const index = parseInt(e.currentTarget.dataset.index);
-                state.tasks.splice(index, 1);
-                renderTaskList();
-                saveStateToFirestore();
-            });
-        });
-    }
-
-    function renderDeckList() {
-        if (!deckList) return;
-        const decks = Array.isArray(state.decks) ? state.decks : [];
-        deckList.innerHTML = '';
-
-        if (decks.length === 0) {
-            deckList.innerHTML = `
-                <div class="col-span-full text-center py-8">
-                    <p class="text-slate-400 mb-4">No tienes temas de estudio aún</p>
-                    <p class="text-sm text-slate-500">Crea tu primer tema para comenzar</p>
-                </div>
-            `;
-            return;
-        }
-
-        decks.forEach(deck => {
-            const cards = Array.isArray(deck.cards) ? deck.cards : [];
-            const totalCards = cards.length;
-            const cardsToReview = cards.filter(card => card.nextReviewDate <= getTodayString()).length;
-            
-            const deckEl = document.createElement('div');
-            deckEl.className = 'deck-card bg-dark-card p-6 rounded-2xl shadow-lg hover:shadow-xl transition-shadow cursor-pointer';
-            deckEl.innerHTML = `
-                <div class="flex-grow">
-                    <h3 class="text-xl font-bold mb-3 leading-tight">${deck.name}</h3>
-                    <div class="flex justify-between items-center text-sm text-slate-300 mb-4">
-                        <span>${totalCards} tarjetas</span>
-                        <span class="text-primary">${cardsToReview} por revisar</span>
-                    </div>
-                </div>
-                <div class="flex gap-2 mt-auto">
-                    <button class="study-deck-btn bg-primary hover:bg-primary-dark text-dark-bg font-semibold py-2 px-3 rounded-full text-xs" data-deck-id="${deck.id}">
-                        Estudiar
-                    </button>
-                    <button class="manage-deck-btn bg-dark-border hover:bg-slate-600 text-secondary font-semibold py-2 px-3 rounded-full text-xs" data-deck-id="${deck.id}">
-                        Gestionar
-                    </button>
-                    <button class="quiz-deck-btn bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-3 rounded-full text-xs" data-deck-id="${deck.id}">
-                        Quiz
-                    </button>
-                </div>
-            `;
-            deckList.appendChild(deckEl);
-        });
-
-        // Event listeners para los botones
-        deckList.querySelectorAll('.study-deck-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const deckId = e.currentTarget.dataset.deckId;
-                startStudySession(deckId);
-            });
-        });
-
-        deckList.querySelectorAll('.manage-deck-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const deckId = e.currentTarget.dataset.deckId;
-                manageDeck(deckId);
-            });
-        });
-
-        deckList.querySelectorAll('.quiz-deck-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const deckId = e.currentTarget.dataset.deckId;
-                startQuiz(deckId);
-            });
-        });
-    }
-
-    function renderStats() {
-        if (!streakEl || !studyTimeEl || !totalDomainEl) return;
-        
-        const streak = calculateStreak();
-        const studyTime = (state.studyTimeMinutes || 0) / 60;
-        const totalDomain = calculateTotalDomain();
-
-        streakEl.textContent = streak;
-        studyTimeEl.textContent = studyTime.toFixed(1);
-        totalDomainEl.textContent = `${Math.round(totalDomain)}%`;
-
-        if (domainByDeckList) {
-            const decks = Array.isArray(state.decks) ? state.decks : [];
-            domainByDeckList.innerHTML = '';
-
-            if (decks.length === 0) {
-                domainByDeckList.innerHTML = '<p class="text-slate-400">No hay temas para mostrar estadísticas</p>';
-                return;
-            }
-
-            decks.forEach(deck => {
-                const domain = calculateDeckDomain(deck);
-                const progressEl = document.createElement('div');
-                progressEl.className = 'mb-3';
-                progressEl.innerHTML = `
-                    <div class="flex justify-between text-sm mb-1">
-                        <span>${deck.name}</span>
-                        <span class="text-primary">${Math.round(domain)}%</span>
-                    </div>
-                    <div class="w-full bg-dark-border rounded-full h-2">
-                        <div class="progress-bar-inner bg-primary h-2 rounded-full" style="width: ${domain}%"></div>
-                    </div>
-                `;
-                domainByDeckList.appendChild(progressEl);
-            });
-        }
-    }
-
-    function renderManageView() {
-        const deck = state.decks.find(d => d.id === state.currentDeckId);
-        if (!deck || !manageDeckTitle) return;
-
-        manageDeckTitle.textContent = deck.name;
-
-        if (cardList) {
-            const cards = Array.isArray(deck.cards) ? deck.cards : [];
-            cardList.innerHTML = '';
-
-            if (cards.length === 0) {
-                cardList.innerHTML = '<p class="text-slate-400 text-center py-4">No hay tarjetas en este tema</p>';
-                return;
-            }
-
-            cards.forEach((card, index) => {
-                const cardEl = document.createElement('div');
-                cardEl.className = 'card-item bg-dark-bg p-4 rounded-lg';
-                cardEl.innerHTML = `
-                    <div class="flex justify-between items-start">
-                        <div class="flex-grow">
-                            <p class="font-semibold mb-1">${card.question}</p>
-                            <p class="text-sm text-slate-400">${card.answer}</p>
-                            <p class="text-xs text-slate-500 mt-2">Próxima revisión: ${card.nextReviewDate}</p>
-                        </div>
-                        <button class="delete-card-btn text-red-400 hover:text-red-300 ml-3" data-index="${index}">
-                            <i data-lucide="trash-2" class="w-4 h-4"></i>
-                        </button>
-                    </div>
-                `;
-                cardList.appendChild(cardEl);
-            });
-
-            cardList.querySelectorAll('.delete-card-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    const index = parseInt(e.currentTarget.dataset.index);
-                    deck.cards.splice(index, 1);
-                    renderManageView();
-                    saveStateToFirestore();
-                });
-            });
-        }
-    }
-
-    function renderStudyView() {
-        const deck = state.decks.find(d => d.id === state.currentDeckId);
-        if (!deck) return;
-
-        if (studyDeckTitle) studyDeckTitle.textContent = `Estudiando: ${deck.name}`;
-
-        const { cardsToReview, currentCardIndex } = state.studySession;
-
-        if (currentCardIndex >= cardsToReview.length) {
-            showStudyComplete();
-            return;
-        }
-
-        const card = cardsToReview[currentCardIndex];
-        if (!card) return;
-
-        if (studyProgress) {
-            studyProgress.textContent = `Tarjeta ${currentCardIndex + 1} de ${cardsToReview.length}`;
-        }
-
-        // Mostrar la tarjeta
-        if (cardFront && cardBack) {
-            const frontText = cardFront.querySelector('p');
-            const backText = cardBack.querySelector('p');
-            const frontImg = document.getElementById('card-front-img');
-            const backImg = document.getElementById('card-back-img');
-
-            if (frontText) frontText.textContent = card.question;
-            if (backText) backText.textContent = card.answer;
-            
-            if (frontImg && card.questionImg) {
-                frontImg.src = card.questionImg;
-                frontImg.classList.remove('hidden');
-            } else if (frontImg) {
-                frontImg.classList.add('hidden');
-            }
-
-            if (backImg && card.answerImg) {
-                backImg.src = card.answerImg;
-                backImg.classList.remove('hidden');
-            } else if (backImg) {
-                backImg.classList.add('hidden');
-            }
-        }
-
-        // Reset card flip
-        if (studyCard) {
-            studyCard.classList.remove('flipped');
-        }
-
-        // Show/hide controls
-        if (studyControlsShow) studyControlsShow.classList.remove('hidden');
-        if (studyControlsRate) studyControlsRate.classList.add('hidden');
-        if (studyComplete) studyComplete.classList.add('hidden');
-    }
-
-    function renderQuizView() {
-        // Implementación básica del quiz
-        const deck = state.decks.find(d => d.id === state.currentDeckId);
-        if (!deck || !quizDeckTitle) return;
-
-        quizDeckTitle.textContent = `Quiz: ${deck.name}`;
-        
-        if (quizContainer) {
-            quizContainer.innerHTML = '<p class="text-center text-slate-400">Quiz en desarrollo...</p>';
-        }
-    }
-
-    // --- Funciones auxiliares ---
-    function getTodayString() {
-        return new Date().toISOString().split('T')[0];
-    }
-
-    function calculateStreak() {
-        if (!Array.isArray(state.studyLog) || state.studyLog.length === 0) return 0;
-        
-        const sortedLog = [...state.studyLog].sort().reverse();
-        const today = getTodayString();
-        let streak = 0;
-        
-        for (let i = 0; i < sortedLog.length; i++) {
-            const expectedDate = new Date();
-            expectedDate.setDate(expectedDate.getDate() - i);
-            const expectedDateStr = expectedDate.toISOString().split('T')[0];
-            
-            if (sortedLog[i] === expectedDateStr) {
-                streak++;
-            } else {
-                break;
-            }
-        }
-        
-        return streak;
-    }
-
-    function calculateTotalDomain() {
-        const decks = Array.isArray(state.decks) ? state.decks : [];
-        if (decks.length === 0) return 0;
-        
-        const totalDomain = decks.reduce((sum, deck) => sum + calculateDeckDomain(deck), 0);
-        return totalDomain / decks.length;
-    }
-
-    function calculateDeckDomain(deck) {
-        const cards = Array.isArray(deck.cards) ? deck.cards : [];
-        if (cards.length === 0) return 0;
-        
-        const masteredCards = cards.filter(card => (card.reviewCount || 0) >= 3 && (card.difficulty || 0) <= 1).length;
-        return (masteredCards / cards.length) * 100;
-    }
-
-    function showNotification(message) {
-        if (notificationText) notificationText.textContent = message;
-        if (notificationModal) notificationModal.classList.remove('hidden');
-    }
-
-    // --- Event Listeners ---
-    
-    // Tareas
-    if (addTaskBtn && taskInput) {
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+     }
+    if (addTaskBtn) {
         addTaskBtn.addEventListener('click', () => {
+             if (!taskInput || !taskPriority) return;
             const text = taskInput.value.trim();
-            const priority = parseInt(taskPriority?.value || 3);
-            
+            const priority = taskPriority.value;
             if (text) {
                 if (!Array.isArray(state.tasks)) state.tasks = [];
-                state.tasks.push({
-                    id: Date.now(),
-                    text: text,
-                    priority: priority,
-                    completed: false,
-                    createdAt: new Date().toISOString()
-                });
+                const newTask = { id: Date.now(), text, priority, completed: false };
+                state.tasks.push(newTask);
                 taskInput.value = '';
                 renderTaskList();
                 saveStateToFirestore();
+                 console.log("Tarea añadida v7:", newTask);
+            } else { showNotification("Texto de tarea vacío."); }
+        });
+     }
+    if (taskList) {
+        taskList.addEventListener('click', (e) => {
+            const completeBtn = e.target.closest('.complete-task-btn');
+            const deleteBtn = e.target.closest('.delete-task-btn');
+            if (completeBtn) {
+                const taskId = Number(completeBtn.dataset.taskId);
+                if (!Array.isArray(state.tasks)) state.tasks = [];
+                const taskIndex = state.tasks.findIndex(t => t.id === taskId);
+                 if (taskIndex > -1) {
+                     state.tasks.splice(taskIndex, 1);
+                     if (isNaN(state.points)) state.points = 0; state.points += 10;
+                     logStudyActivity(); render(); saveStateToFirestore();
+                     showNotification("¡Tarea completada! +10 puntos");
+                 }
+            }
+            if (deleteBtn) {
+                const taskId = Number(deleteBtn.dataset.taskId);
+                 if (!Array.isArray(state.tasks)) state.tasks = [];
+                 const taskIndex = state.tasks.findIndex(t => t.id === taskId);
+                 if (taskIndex > -1) { state.tasks.splice(taskIndex, 1); renderTaskList(); saveStateToFirestore(); }
             }
         });
-
-        taskInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                addTaskBtn.click();
-            }
+     }
+    // --- Lógica de Temas (Decks) ---
+    function renderDeckList() {
+        if (!deckList || !noDecksMessage) return;
+        console.log("Renderizando decks v7:", state?.decks);
+        deckList.innerHTML = '';
+        const decksToRender = Array.isArray(state?.decks) ? state.decks : [];
+        if (decksToRender.length === 0) { noDecksMessage.classList.remove('hidden'); return; }
+        noDecksMessage.classList.add('hidden');
+        const today = getTodayString();
+        decksToRender.forEach(deck => {
+            const cards = Array.isArray(deck.cards) ? deck.cards : [];
+            const cardsToReview = cards.filter(c => c.nextReviewDate <= today).length;
+            const deckEl = document.createElement('div');
+            deckEl.className = 'bg-slate-800 p-5 rounded-lg shadow-lg flex flex-col justify-between';
+            deckEl.dataset.deckId = deck.id;
+            deckEl.innerHTML = `
+                <div>
+                    <h3 class="text-xl font-bold text-white truncate mb-2" title="${deck.name}">${deck.name}</h3>
+                    <p class="text-sm text-slate-400 mb-4">${cards.length} tarjeta(s)</p>
+                    ${cardsToReview > 0 ? `<span class="inline-block bg-teal-600 text-teal-100 text-xs font-semibold px-2 py-1 rounded-full mb-4">${cardsToReview} para repasar</span>` : `<span class="inline-block bg-slate-700 text-slate-300 text-xs font-semibold px-2 py-1 rounded-full mb-4">¡Al día!</span>`}
+                </div>
+                <div class="flex gap-2">
+                    <button data-deck-id="${deck.id}" class="study-deck-btn flex-1 bg-teal-600 hover:bg-teal-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors ${cardsToReview === 0 ? 'opacity-50 cursor-not-allowed' : ''}" ${cardsToReview === 0 ? 'disabled' : ''}>Estudiar</button>
+                    <button data-deck-id="${deck.id}" class="quiz-deck-btn flex-1 bg-slate-700 hover:bg-slate-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors ${cards.length < 4 ? 'opacity-50 cursor-not-allowed' : ''}" ${cards.length < 4 ? 'disabled' : ''}>Quiz</button>
+                    <button data-deck-id="${deck.id}" class="manage-deck-btn bg-slate-700 hover:bg-slate-600 text-white font-semibold py-2 px-3 rounded-lg transition-colors"><i data-lucide="settings-2" class="w-5 h-5"></i></button>
+                </div>`;
+            deckList.appendChild(deckEl);
         });
-    }
-
-    // Decks
-    if (addDeckBtn) {
-        addDeckBtn.addEventListener('click', () => {
-            if (newDeckModal) newDeckModal.classList.remove('hidden');
-        });
-    }
-
-    if (saveDeckModalBtn && newDeckNameInput) {
-        saveDeckModalBtn.addEventListener('click', () => {
-            const name = newDeckNameInput.value.trim();
-            if (name) {
-                if (!Array.isArray(state.decks)) state.decks = [];
-                state.decks.push({
-                    id: Date.now().toString(),
-                    name: name,
-                    cards: [],
-                    createdAt: new Date().toISOString()
-                });
-                newDeckNameInput.value = '';
-                if (newDeckModal) newDeckModal.classList.add('hidden');
-                renderDeckList();
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+     }
+    if (newDeckBtn) {
+        newDeckBtn.addEventListener('click', () => {
+            const deckName = prompt("Introduce el nombre del nuevo tema:");
+            if (deckName?.trim()) {
+                 if (!Array.isArray(state.decks)) state.decks = [];
+                const newDeck = { id: 'deck_' + Date.now(), name: deckName.trim(), cards: [] };
+                state.decks.push(newDeck);
+                state.currentDeckId = newDeck.id;
+                navigate(VIEWS.MANAGE);
                 saveStateToFirestore();
+                 console.log("Nuevo tema creado v7:", newDeck);
+            } else if (deckName !== null) { showNotification("Nombre de tema vacío."); }
+        });
+     }
+    if (deckList) {
+         deckList.addEventListener('click', (e) => {
+            const studyBtn = e.target.closest('.study-deck-btn');
+            const quizBtn = e.target.closest('.quiz-deck-btn');
+            const manageBtn = e.target.closest('.manage-deck-btn');
+            const deckEl = e.target.closest('[data-deck-id]');
+            const deckId = deckEl?.dataset.deckId;
+            if (!deckId) return;
+            state.currentDeckId = deckId;
+            if (studyBtn) { startStudySession(); }
+            else if (quizBtn) { startQuiz(); }
+            else if (manageBtn) { navigate(VIEWS.MANAGE); }
+        });
+     }
+    // --- Lógica de Estadísticas ---
+    function renderStats() {
+        if (!streakEl || !studyTimeEl || !totalDomainEl || !domainByDeckList) return;
+        const today = getTodayString();
+        const studyLog = Array.isArray(state?.studyLog) ? state.studyLog : [];
+        streakEl.textContent = calculateStreak(today, studyLog);
+        studyTimeEl.textContent = ((state?.studyTimeMinutes || 0) / 60).toFixed(1);
+        let totalCards = 0, totalMasteredCards = 0;
+        domainByDeckList.innerHTML = '';
+        const decksToRender = Array.isArray(state?.decks) ? state.decks : [];
+        if (decksToRender.length === 0) {
+            domainByDeckList.innerHTML = '<p class="text-sm text-slate-400 px-3">Añade temas.</p>';
+            totalDomainEl.textContent = `0%`; return;
+        }
+        decksToRender.forEach(deck => {
+             const cards = Array.isArray(deck.cards) ? deck.cards : [];
+            if (cards.length > 0) {
+                const masteredCards = cards.filter(c => getNextInterval(c.interval || 0, 'easy') >= 21).length;
+                const domain = Math.round((masteredCards / cards.length) * 100);
+                totalCards += cards.length; totalMasteredCards += masteredCards;
+                const deckStatEl = document.createElement('div');
+                deckStatEl.className = 'mb-3 px-3';
+                deckStatEl.innerHTML = `
+                    <div class="flex justify-between items-center mb-1"> <span class="text-sm text-slate-300 truncate" title="${deck.name}">${deck.name}</span> <span class="text-sm font-semibold text-white">${domain}%</span> </div>
+                    <div class="w-full bg-slate-700 rounded-full h-2"> <div class="bg-teal-500 h-2 rounded-full" style="width: ${domain}%"></div> </div>`;
+                domainByDeckList.appendChild(deckStatEl);
             }
         });
-    }
-
-    if (cancelDeckModalBtn) {
-        cancelDeckModalBtn.addEventListener('click', () => {
-            if (newDeckModal) newDeckModal.classList.add('hidden');
-            if (newDeckNameInput) newDeckNameInput.value = '';
+        totalDomainEl.textContent = `${(totalCards > 0) ? Math.round((totalMasteredCards / totalCards) * 100) : 0}%`;
+     }
+    function calculateStreak(todayString, studyLog) {
+        let streak = 0; const dates = new Set(studyLog);
+        if (dates.size === 0 || !dates.has(todayString)) return 0;
+        let currentDate = new Date(todayString + 'T00:00:00Z');
+        while (dates.has(currentDate.toISOString().split('T')[0])) {
+            streak++; currentDate.setDate(currentDate.getDate() - 1);
+        } return streak;
+     }
+    // --- Lógica de Gestionar Tema (Manage) ---
+    function renderManageView() {
+        if (!Array.isArray(state.decks)) state.decks = [];
+        const deck = state.decks.find(d => d.id === state.currentDeckId);
+        if (!deck) { navigate(VIEWS.DASHBOARD); return; }
+        if (manageDeckTitle) manageDeckTitle.textContent = deck.name;
+        if (!cardList) return; cardList.innerHTML = '';
+        const cards = Array.isArray(deck.cards) ? deck.cards : [];
+        if (cards.length === 0) { cardList.innerHTML = '<p class="text-sm text-slate-400 px-3">No hay tarjetas.</p>'; return; }
+        [...cards].reverse().forEach(card => {
+            const cardEl = document.createElement('div');
+            cardEl.className = 'bg-slate-800 p-4 rounded-lg mb-2 flex justify-between items-start group';
+            cardEl.innerHTML = `
+                <div class="flex-1 overflow-hidden min-w-0 mr-4">
+                    ${card.questionImg ? `<img src="${card.questionImg}" class="max-w-full h-auto max-h-20 rounded mb-2 object-contain" onerror="this.style.display='none'">` : ''}
+                    <p class="text-slate-300 font-semibold truncate" title="${card.question}"><strong class="text-teal-400">P:</strong> ${card.question}</p>
+                    ${card.answerImg ? `<img src="${card.answerImg}" class="max-w-full h-auto max-h-20 rounded mt-2 mb-2 object-contain" onerror="this.style.display='none'">` : ''}
+                    <p class="text-slate-300 truncate" title="${card.answer}"><strong class="text-teal-400">R:</strong> ${card.answer}</p>
+                </div>
+                <button data-card-id="${card.id}" class="delete-card-btn p-1 text-slate-500 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"> <i data-lucide="trash-2" class="w-4 h-4"></i> </button>`;
+            cardList.appendChild(cardEl);
         });
-    }
-
-    // Gestión de tarjetas
-    if (addCardToDeckBtn) {
-        addCardToDeckBtn.addEventListener('click', () => {
-            const question = cardQuestionInput?.value.trim();
-            const answer = cardAnswerInput?.value.trim();
-            const questionImg = cardQuestionImgInput?.value.trim() || null;
-            const answerImg = cardAnswerImgInput?.value.trim() || null;
-
-            if (question && answer) {
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+     }
+     if (addCardForm) {
+        addCardForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            if (!Array.isArray(state.decks)) state.decks = [];
+            const deck = state.decks.find(d => d.id === state.currentDeckId);
+            if (deck) {
+                 if (!Array.isArray(deck.cards)) deck.cards = [];
+                 const question = cardQuestionInput?.value.trim(); const answer = cardAnswerInput?.value.trim();
+                 if (!question || !answer) { showNotification("Pregunta y respuesta obligatorias."); return; }
+                const newCard = { id: 'card_' + Date.now(), question, answer, questionImg: cardQuestionImgInput?.value.trim() || null, answerImg: cardAnswerImgInput?.value.trim() || null, interval: 0, easeFactor: 2.5, nextReviewDate: getTodayString() };
+                deck.cards.push(newCard); renderManageView(); saveStateToFirestore(); addCardForm.reset();
+                 console.log("Nueva tarjeta v7:", newCard);
+            }
+        });
+     }
+    if (cardList) {
+        cardList.addEventListener('click', (e) => {
+            const deleteBtn = e.target.closest('.delete-card-btn');
+            if (deleteBtn) {
+                const cardId = deleteBtn.dataset.cardId;
                 const deck = state.decks.find(d => d.id === state.currentDeckId);
-                if (deck) {
-                    if (!Array.isArray(deck.cards)) deck.cards = [];
-                    deck.cards.push({
-                        id: Date.now().toString(),
-                        question: question,
-                        answer: answer,
-                        questionImg: questionImg,
-                        answerImg: answerImg,
-                        nextReviewDate: getTodayString(),
-                        reviewCount: 0,
-                        difficulty: 0,
-                        createdAt: new Date().toISOString()
-                    });
-                    
-                    // Limpiar inputs
-                    if (cardQuestionInput) cardQuestionInput.value = '';
-                    if (cardAnswerInput) cardAnswerInput.value = '';
-                    if (cardQuestionImgInput) cardQuestionImgInput.value = '';
-                    if (cardAnswerImgInput) cardAnswerImgInput.value = '';
-                    
-                    renderManageView();
-                    saveStateToFirestore();
-                    showNotification('Tarjeta añadida exitosamente');
-                }
+                if (deck) { deck.cards = deck.cards.filter(c => c.id !== cardId); renderManageView(); saveStateToFirestore(); }
             }
         });
-    }
-
+     }
     if (deleteDeckBtn) {
         deleteDeckBtn.addEventListener('click', () => {
-            if (confirm('¿Estás seguro de que quieres eliminar este tema? Esta acción no se puede deshacer.')) {
-                const deckIndex = state.decks.findIndex(d => d.id === state.currentDeckId);
-                if (deckIndex !== -1) {
-                    state.decks.splice(deckIndex, 1);
-                    navigate(VIEWS.DASHBOARD);
-                    saveStateToFirestore();
-                    showNotification('Tema eliminado');
-                }
-            }
+             showConfirmationModal("¿Eliminar tema y tarjetas?", () => {
+                 if (!Array.isArray(state.decks)) state.decks = [];
+                state.decks = state.decks.filter(d => d.id !== state.currentDeckId);
+                navigate(VIEWS.DASHBOARD); saveStateToFirestore();
+                 console.log("Deck eliminado v7:", state.currentDeckId);
+             });
         });
-    }
-
-    // Estudio
+     }
+    // --- Lógica de Sesión de Estudio (Study) ---
+    function startStudySession() {
+        if (!Array.isArray(state.decks)) state.decks = [];
+        const deck = state.decks.find(d => d.id === state.currentDeckId);
+        if (!deck) return;
+        const today = getTodayString();
+        const cards = Array.isArray(deck.cards) ? deck.cards : [];
+        const cardsToReview = cards.filter(c => c.nextReviewDate <= today).sort(() => Math.random() - 0.5);
+        state.studySession = { cardsToReview, currentCardIndex: 0, correctAnswers: 0 };
+        console.log("Iniciando estudio v7 con:", cardsToReview);
+        if (cardsToReview.length > 0) { logStudyActivity(); navigate(VIEWS.STUDY); }
+        else { showNotification("¡Al día!"); }
+     }
+    function renderStudyView() {
+        if (!state.studySession) state.studySession = defaultState.studySession;
+        const { cardsToReview, currentCardIndex } = state.studySession;
+        if (!Array.isArray(state.decks)) state.decks = [];
+        const deck = state.decks.find(d => d.id === state.currentDeckId);
+        if (!deck) { navigate(VIEWS.DASHBOARD); return; }
+        if (studyDeckTitle) studyDeckTitle.textContent = deck.name;
+        const reviewList = Array.isArray(cardsToReview) ? cardsToReview : [];
+        if (currentCardIndex >= reviewList.length) { // Fin de sesión
+            if (studyProgress) studyProgress.textContent = `Progreso: ${reviewList.length}/${reviewList.length}`;
+            if (studyCard) {
+                studyCard.innerHTML = `<div class="text-center p-8"> <h3 class="text-2xl font-bold text-white mb-4">¡Sesión completada!</h3> <p class="text-lg text-slate-300 mb-6">Repasaste ${reviewList.length} tarjetas.</p> <button id="finish-study-session-btn" class="bg-teal-600 hover:bg-teal-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors">Volver</button> </div>`;
+                document.getElementById('finish-study-session-btn')?.addEventListener('click', () => { navigate(VIEWS.DASHBOARD); saveStateToFirestore(); });
+            } if (typeof lucide !== 'undefined') lucide.createIcons(); return;
+        }
+        // Mostrar tarjeta actual
+        if (studyProgress) studyProgress.textContent = `Progreso: ${currentCardIndex + 1}/${reviewList.length}`;
+        const currentCard = reviewList[currentCardIndex];
+        if (studyQuestionImg) { studyQuestionImg.src = currentCard.questionImg || ''; studyQuestionImg.classList.toggle('hidden', !currentCard.questionImg); studyQuestionImg.onerror = () => { if(studyQuestionImg) studyQuestionImg.classList.add('hidden'); }; }
+        if (studyQuestionTextEl) studyQuestionTextEl.textContent = currentCard.question;
+        if (studyAnswerImg) { studyAnswerImg.src = ''; studyAnswerImg.classList.add('hidden'); studyAnswerImg.onerror = () => { if(studyAnswerImg) studyAnswerImg.classList.add('hidden'); }; }
+        if (studyAnswerTextEl) { studyAnswerTextEl.textContent = currentCard.answer; if (studyAnswerTextEl.parentElement) studyAnswerTextEl.parentElement.classList.add('hidden'); }
+        if (studyDifficultyBtns) studyDifficultyBtns.classList.add('hidden');
+        if (showAnswerBtn) showAnswerBtn.classList.remove('hidden');
+        if (studyCard) studyCard.classList.remove('hidden');
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+     }
     if (showAnswerBtn) {
         showAnswerBtn.addEventListener('click', () => {
-            if (studyCard) studyCard.classList.add('flipped');
-            if (studyControlsShow) studyControlsShow.classList.add('hidden');
-            if (studyControlsRate) studyControlsRate.classList.remove('hidden');
+             if (!state.studySession) return;
+            const { cardsToReview, currentCardIndex } = state.studySession; const reviewList = Array.isArray(cardsToReview) ? cardsToReview : [];
+            if (currentCardIndex >= reviewList.length) return; const currentCard = reviewList[currentCardIndex];
+            if (studyAnswerImg) { studyAnswerImg.src = currentCard.answerImg || ''; studyAnswerImg.classList.toggle('hidden', !currentCard.answerImg); }
+            if (studyAnswerTextEl?.parentElement) { studyAnswerTextEl.parentElement.classList.remove('hidden'); }
+            showAnswerBtn.classList.add('hidden'); if (studyDifficultyBtns) studyDifficultyBtns.classList.remove('hidden');
         });
-    }
-
-    if (studyControlsRate) {
-        studyControlsRate.addEventListener('click', (e) => {
-            const btn = e.target.closest('.rate-btn');
-            if (!btn) return;
-
-            const difficulty = btn.dataset.difficulty;
-            const { cardsToReview, currentCardIndex } = state.studySession;
-            const card = cardsToReview[currentCardIndex];
-
-            if (card) {
-                // Encontrar la tarjeta original en el deck
-                const deck = state.decks.find(d => d.id === state.currentDeckId);
-                const originalCard = deck.cards.find(c => c.id === card.id);
-                
-                if (originalCard) {
-                    // Actualizar estadísticas de la tarjeta original
-                    originalCard.reviewCount = (originalCard.reviewCount || 0) + 1;
-                    
-                    // Calcular próxima fecha de revisión y puntos
-                    let daysToAdd = 1;
-                    let pointsEarned = 0;
-                    
-                    switch (difficulty) {
-                        case 'easy':
-                            daysToAdd = 7;
-                            originalCard.difficulty = Math.max(0, (originalCard.difficulty || 0) - 1);
-                            pointsEarned = 15;
-                            break;
-                        case 'good':
-                            daysToAdd = 3;
-                            pointsEarned = 10;
-                            break;
-                        case 'hard':
-                            daysToAdd = 1;
-                            originalCard.difficulty = (originalCard.difficulty || 0) + 1;
-                            pointsEarned = 5;
-                            break;
-                    }
-
-                    const nextDate = new Date();
-                    nextDate.setDate(nextDate.getDate() + daysToAdd);
-                    originalCard.nextReviewDate = nextDate.toISOString().split('T')[0];
-
-                    // Actualizar puntos globales y de sesión
-                    if (isNaN(state.points)) state.points = 0;
-                    state.points += pointsEarned;
-                    state.studySession.sessionPoints += pointsEarned;
-
-                    // Actualizar puntos en header
-                    const pointsDisplay = document.getElementById('points');
-                    if (pointsDisplay) pointsDisplay.textContent = `${state.points} pts`;
-
-                    // Pasar a la siguiente tarjeta
-                    state.studySession.currentCardIndex++;
-                    renderStudyView();
-                    
-                    // Registrar actividad y guardar
-                    logStudyActivity();
-                    saveStateToFirestore();
-                }
-            }
+     }
+     if (studyDifficultyBtns) {
+        studyDifficultyBtns.addEventListener('click', (e) => {
+            const difficulty = e.target.closest('button')?.dataset.difficulty; if (!difficulty || !state.studySession) return;
+            const { cardsToReview, currentCardIndex } = state.studySession; const reviewList = Array.isArray(cardsToReview) ? cardsToReview : [];
+            if (currentCardIndex >= reviewList.length) return; const card = reviewList[currentCardIndex];
+            let { interval = 0, easeFactor = 2.5 } = card; let nextInterval, newEaseFactor = easeFactor;
+            if (difficulty === 'easy') { nextInterval = getNextInterval(interval, 'easy'); newEaseFactor = Math.min(3.0, easeFactor + 0.15); if(!isNaN(state.points)) state.points += 3; state.studySession.correctAnswers++; }
+            else if (difficulty === 'good') { nextInterval = getNextInterval(interval, 'good'); if(!isNaN(state.points)) state.points += 2; state.studySession.correctAnswers++; }
+            else { nextInterval = 0; newEaseFactor = Math.max(1.3, easeFactor - 0.2); if(!isNaN(state.points)) state.points += 1; }
+            const nextReviewDate = new Date(getTodayString() + 'T00:00:00Z'); const daysToAdd = Number.isFinite(nextInterval) ? Math.round(nextInterval) : 1;
+            nextReviewDate.setDate(nextReviewDate.getDate() + daysToAdd);
+            const deck = state.decks?.find(d => d.id === state.currentDeckId); const cardInDeck = deck?.cards?.find(c => c.id === card.id);
+            if (cardInDeck) { cardInDeck.interval = nextInterval; cardInDeck.easeFactor = newEaseFactor; cardInDeck.nextReviewDate = nextReviewDate.toISOString().split('T')[0]; }
+            state.studySession.currentCardIndex++; renderStudyView(); saveStateToFirestore();
         });
-    }
-
-    if (finishSessionBtn) {
-        finishSessionBtn.addEventListener('click', () => {
-            navigate(VIEWS.DASHBOARD);
+     }
+    function getNextInterval(lastInterval, difficulty) {
+        if (difficulty === 'hard') return Math.max(1, Math.floor(lastInterval / 2)); if (lastInterval === 0) return (difficulty === 'easy') ? 4 : 1; if (lastInterval === 1) return (difficulty === 'easy') ? 7 : 3;
+        let next = lastInterval * (difficulty === 'easy' ? 2.5 : 2.0); return Math.min(Math.round(next), 60); // Max 60 days
+     }
+    // --- Lógica de Quiz ---
+    let quizState = { questions: [], currentQuestionIndex: 0, score: 0, answered: false };
+    function startQuiz() {
+        if (!Array.isArray(state.decks)) state.decks = []; const deck = state.decks.find(d => d.id === state.currentDeckId);
+        const cards = Array.isArray(deck?.cards) ? deck.cards : []; if (!deck || cards.length < 4) { showNotification("Necesitas >= 4 tarjetas."); return; }
+        logStudyActivity(); const shuffledCards = [...cards].sort(() => Math.random() - 0.5);
+        quizState = { questions: shuffledCards.map(card => generateQuizQuestion(card, cards)), currentQuestionIndex: 0, score: 0, answered: false };
+        navigate(VIEWS.QUIZ);
+     }
+    function generateQuizQuestion(correctCard, allCards) {
+        let options = [correctCard.answer]; const incorrectCards = allCards.filter(c => c.id !== correctCard.id);
+        const shuffledIncorrect = [...incorrectCards].sort(() => Math.random() - 0.5);
+        for (let i = 0; options.length < 4 && i < shuffledIncorrect.length; i++) { if (!options.includes(shuffledIncorrect[i].answer)) options.push(shuffledIncorrect[i].answer); }
+        let fillerIndex = 1; while (options.length < 4) { const filler = `Opción ${fillerIndex++}`; if (!options.includes(filler)) options.push(filler); else options.push(Math.random().toString(16).substring(2, 8)); }
+        options.sort(() => Math.random() - 0.5); return { question: correctCard.question, options, correctAnswer: correctCard.answer };
+     }
+    function renderQuizView() {
+        if (!Array.isArray(state.decks)) state.decks = []; const deck = state.decks.find(d => d.id === state.currentDeckId);
+        if (!deck) { navigate(VIEWS.DASHBOARD); return; } if (quizDeckTitle) quizDeckTitle.textContent = `Quiz: ${deck.name}`;
+        if (quizFeedback) quizFeedback.classList.add('hidden'); if (nextQuizQuestionBtn) nextQuizQuestionBtn.classList.add('hidden');
+        const { questions, currentQuestionIndex } = quizState;
+        if (currentQuestionIndex >= questions.length) { // Fin quiz
+            const scorePercent = (questions.length > 0) ? Math.round((quizState.score / questions.length) * 100) : 0;
+            if (quizQuestionText) quizQuestionText.textContent = '¡Quiz completado!';
+            if (quizOptionsList) {
+                quizOptionsList.innerHTML = `<p class="text-xl text-center text-slate-300"> Puntuación: ${quizState.score}/${questions.length} (${scorePercent}%) </p> <button id="finish-quiz-btn" class="w-full mt-6 bg-teal-600 hover:bg-teal-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors">Volver</button>`;
+                document.getElementById('finish-quiz-btn')?.addEventListener('click', () => { navigate(VIEWS.DASHBOARD); saveStateToFirestore(); });
+            } if (typeof lucide !== 'undefined') lucide.createIcons(); return;
+        } // Mostrar pregunta
+        if (quizProgress) quizProgress.textContent = `Pregunta: ${currentQuestionIndex + 1}/${questions.length}`; const question = questions[currentQuestionIndex];
+        if (quizQuestionText) quizQuestionText.textContent = question.question;
+        if (quizOptionsList) {
+            quizOptionsList.innerHTML = ''; question.options.forEach(option => {
+                const optionEl = document.createElement('button'); optionEl.className = 'quiz-option w-full bg-slate-700 hover:bg-slate-600 text-slate-200 text-left p-4 rounded-lg transition-colors';
+                optionEl.textContent = option; quizOptionsList.appendChild(optionEl);
+            });
+        } quizState.answered = false; if (typeof lucide !== 'undefined') lucide.createIcons();
+     }
+    if (quizOptionsList) {
+        quizOptionsList.addEventListener('click', (e) => {
+            const selectedOption = e.target.closest('.quiz-option'); if (!selectedOption || quizState.answered) return;
+            quizState.answered = true; const answer = selectedOption.textContent; const question = quizState.questions[quizState.currentQuestionIndex];
+            quizOptionsList.querySelectorAll('.quiz-option').forEach(btn => {
+                btn.disabled = true; btn.classList.add('opacity-70');
+                if (btn.textContent === question.correctAnswer) { btn.classList.remove('bg-slate-700','hover:bg-slate-600','opacity-70'); btn.classList.add('bg-green-700'); }
+                else if (btn === selectedOption) { btn.classList.remove('bg-slate-700','hover:bg-slate-600','opacity-70'); btn.classList.add('bg-red-700'); }
+            });
+            if (answer === question.correctAnswer) {
+                 if (quizFeedback) { quizFeedback.textContent = '¡Correcto! +10 puntos'; quizFeedback.className = 'p-3 rounded-lg bg-green-900 text-green-200 mt-4'; }
+                 quizState.score++; if (isNaN(state.points)) state.points = 0; state.points += 10;
+                 // Actualizar puntos header al instante
+                 const pointsDisplay = document.getElementById('points'); if (pointsDisplay) pointsDisplay.textContent = `${state.points} pts`;
+            } else { if (quizFeedback) { quizFeedback.textContent = `Incorrecto. Correcta: ${question.correctAnswer}`; quizFeedback.className = 'p-3 rounded-lg bg-red-900 text-red-200 mt-4'; } }
+            if (quizFeedback) quizFeedback.classList.remove('hidden'); if (nextQuizQuestionBtn) nextQuizQuestionBtn.classList.remove('hidden');
         });
-    }
-
-    // Modales
-    if (notificationOkBtn) {
-        notificationOkBtn.addEventListener('click', () => {
-            if (notificationModal) notificationModal.classList.add('hidden');
-        });
-    }
-
-    // Pomodoro
+     }
+    if (nextQuizQuestionBtn) { nextQuizQuestionBtn.addEventListener('click', () => { quizState.currentQuestionIndex++; renderQuizView(); }); }
+    // --- Lógica del Pomodoro ---
     function updatePomodoroUI() {
-        if (!pomodoroTimerEl) return;
-        const pom = state.pomodoro || defaultState.pomodoro;
-        const timeLeft = pom.timeLeft ?? (25 * 60);
-        const minutes = Math.floor(timeLeft / 60);
-        const seconds = timeLeft % 60;
+        if (!pomodoroTimerEl || !state?.pomodoro) return;
+        const timeLeft = state.pomodoro.timeLeft ?? (25 * 60); const minutes = Math.floor(timeLeft / 60); const seconds = timeLeft % 60;
         pomodoroTimerEl.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-        if (startPomodoroBtn) startPomodoroBtn.textContent = pom.isRunning ? 'Pausar' : 'Iniciar';
-    }
-
+        if (startPomodoroBtn) startPomodoroBtn.textContent = state.pomodoro.isRunning ? 'Pausar' : 'Iniciar';
+        if (state.pomodoro.isBreak) { document.body.classList.add('bg-teal-900'); document.body.classList.remove('bg-slate-900'); }
+        else { document.body.classList.remove('bg-teal-900'); document.body.classList.add('bg-slate-900'); }
+     }
     function startPomodoro() {
         if (!state.pomodoro) state.pomodoro = { ...defaultState.pomodoro };
-        if (state.pomodoro.isRunning) {
-            clearInterval(state.pomodoro.timer);
-            state.pomodoro.isRunning = false;
-        } else {
+        if (state.pomodoro.isRunning) { clearInterval(state.pomodoro.timer); state.pomodoro.isRunning = false; } else {
             state.pomodoro.isRunning = true;
-            state.pomodoro.endTime = state.pomodoro.endTime && state.pomodoro.endTime > Date.now() ? 
-                state.pomodoro.endTime : Date.now() + (state.pomodoro.timeLeft * 1000);
-            
-            if (state.pomodoro.endTime > Date.now()) {
-                state.pomodoro.timeLeft = Math.round((state.pomodoro.endTime - Date.now()) / 1000);
-            }
-            
+            state.pomodoro.endTime = state.pomodoro.endTime && state.pomodoro.endTime > Date.now() ? state.pomodoro.endTime : Date.now() + (state.pomodoro.timeLeft * 1000);
+            if (state.pomodoro.endTime > Date.now()) state.pomodoro.timeLeft = Math.round((state.pomodoro.endTime - Date.now()) / 1000);
             state.pomodoro.timer = setInterval(() => {
                 const timeLeftMs = (state.pomodoro.endTime || 0) - Date.now();
-                if (timeLeftMs <= 0) {
-                    handlePomodoroFinish();
-                } else {
-                    state.pomodoro.timeLeft = Math.round(timeLeftMs / 1000);
-                }
+                if (timeLeftMs <= 0) handlePomodoroFinish(); else state.pomodoro.timeLeft = Math.round(timeLeftMs / 1000);
                 updatePomodoroUI();
             }, 1000);
-        }
-        updatePomodoroUI();
-        saveStateToFirestore();
-    }
-
+        } updatePomodoroUI(); saveStateToFirestore();
+     }
     function handlePomodoroFinish() {
-        clearInterval(state.pomodoro.timer);
-        if (!state.pomodoro) state.pomodoro = { ...defaultState.pomodoro };
-        state.pomodoro.isRunning = false;
-        state.pomodoro.endTime = null;
-        
-        if (state.pomodoro.isBreak) {
-            state.pomodoro.isBreak = false;
-            state.pomodoro.timeLeft = 25 * 60;
-            showNotification("¡Descanso terminado!");
-        } else {
-            state.pomodoro.isBreak = true;
-            state.pomodoro.timeLeft = 5 * 60;
-            if (isNaN(state.points)) state.points = 0;
-            state.points += 25;
-            if (isNaN(state.studyTimeMinutes)) state.studyTimeMinutes = 0;
-            state.studyTimeMinutes += 25;
-            logStudyActivity();
-            showNotification("¡Pomodoro completado! +25 pts. Tiempo de descanso...");
-            
-            // Actualizar puntos en header
-            const pointsDisplay = document.getElementById('points');
-            if (pointsDisplay) pointsDisplay.textContent = `${state.points} pts`;
-        }
-        updatePomodoroUI();
-        saveStateToFirestore();
-    }
-
+        clearInterval(state.pomodoro?.timer); if (!state.pomodoro) state.pomodoro = { ...defaultState.pomodoro };
+        state.pomodoro.isRunning = false; state.pomodoro.endTime = null; playPomodoroSound(state.pomodoro.isBreak);
+        if (state.pomodoro.isBreak) { state.pomodoro.isBreak = false; state.pomodoro.timeLeft = 25 * 60; showNotification("¡Descanso terminado!"); }
+        else { state.pomodoro.isBreak = true; state.pomodoro.timeLeft = 5 * 60; if (isNaN(state.points)) state.points = 0; state.points += 25; if (isNaN(state.studyTimeMinutes)) state.studyTimeMinutes = 0; state.studyTimeMinutes += 25; logStudyActivity(); showNotification("¡Pomodoro! +25 pts. Descanso..."); }
+        updatePomodoroUI(); saveStateToFirestore();
+     }
     function resetPomodoro() {
-        clearInterval(state.pomodoro?.timer);
-        state.pomodoro = { ...defaultState.pomodoro };
-        updatePomodoroUI();
-        saveStateToFirestore();
-    }
-
+        clearInterval(state.pomodoro?.timer); state.pomodoro = { ...defaultState.pomodoro };
+        updatePomodoroUI(); saveStateToFirestore();
+     }
     function checkRunningPomodoro() {
-        if (state.pomodoro?.endTime && state.pomodoro.endTime > Date.now()) {
-            state.pomodoro.timeLeft = Math.round((state.pomodoro.endTime - Date.now()) / 1000);
-            startPomodoro();
-        } else if (state.pomodoro?.endTime && state.pomodoro.endTime <= Date.now()) {
-            handlePomodoroFinish();
-        }
-    }
-
+        if (state.pomodoro?.endTime && state.pomodoro.endTime > Date.now()) { state.pomodoro.timeLeft = Math.round((state.pomodoro.endTime - Date.now()) / 1000); startPomodoro(); }
+        else if (state.pomodoro?.endTime && state.pomodoro.endTime <= Date.now()) { handlePomodoroFinish(); }
+     }
     if (startPomodoroBtn) startPomodoroBtn.addEventListener('click', startPomodoro);
     if (resetPomodoroBtn) resetPomodoroBtn.addEventListener('click', resetPomodoro);
+    // --- Utilidades ---
+    function getTodayString() { return new Date().toISOString().split('T')[0]; }
+    function showNotification(message) {
+        if (!notification) return; notification.textContent = message; notification.classList.remove('hidden', 'opacity-0', 'translate-y-full'); notification.classList.add('opacity-100', '-translate-y-4');
+        setTimeout(() => { if (!notification) return; notification.classList.remove('opacity-100', '-translate-y-4'); notification.classList.add('opacity-0', 'translate-y-full'); setTimeout(() => { if (notification) notification.classList.add('hidden'); }, 500); }, 3000);
+     }
+    let audioCtx; function playPomodoroSound(isBreak) {
+        try { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); if (!audioCtx) return; const oscillator = audioCtx.createOscillator(); const gainNode = audioCtx.createGain(); oscillator.connect(gainNode); gainNode.connect(audioCtx.destination); oscillator.type = 'sine'; oscillator.frequency.setValueAtTime(isBreak ? 660 : 440, audioCtx.currentTime); gainNode.gain.setValueAtTime(0.5, audioCtx.currentTime); oscillator.start(audioCtx.currentTime); oscillator.stop(audioCtx.currentTime + 0.5); }
+        catch (e) { console.error("Error al reproducir sonido:", e); }
+     }
+     function showConfirmationModal(message, onConfirm) {
+        if (confirmModal && confirmText && confirmOkBtn && confirmCancelBtn) {
+            confirmText.textContent = message; confirmModal.classList.remove('hidden');
+            const newOkBtn = confirmOkBtn.cloneNode(true); confirmOkBtn.parentNode.replaceChild(newOkBtn, confirmOkBtn); confirmOkBtn = newOkBtn;
+            const newCancelBtn = confirmCancelBtn.cloneNode(true); confirmCancelBtn.parentNode.replaceChild(newCancelBtn, confirmCancelBtn); confirmCancelBtn = newCancelBtn;
+            confirmOkBtn.onclick = () => { confirmModal.classList.add('hidden'); onConfirm(); };
+            confirmCancelBtn.onclick = () => { confirmModal.classList.add('hidden'); };
+        } else { if (window.confirm(message)) { onConfirm(); } }
+     }
 
-    // --- Funciones de navegación ---
-    function manageDeck(deckId) {
-        state.currentDeckId = deckId;
-        navigate(VIEWS.MANAGE);
-    }
-
-    function startStudySession(deckId) {
-        const deck = state.decks.find(d => d.id === deckId);
-        if (!deck) return;
-
-        const cardsToReview = deck.cards.filter(card => 
-            card.nextReviewDate <= getTodayString()
-        );
-
-        if (cardsToReview.length === 0) {
-            showNotification('No hay tarjetas para revisar hoy en este tema.');
-            return;
-        }
-
-        state.currentDeckId = deckId;
-        state.studySession = {
-            cardsToReview: cardsToReview,
-            currentCardIndex: 0,
-            correctAnswers: 0,
-            sessionPoints: 0  // Rastrear puntos de la sesión
-        };
-
-        navigate(VIEWS.STUDY);
-    }
-
-    function startQuiz(deckId) {
-        state.currentDeckId = deckId;
-        navigate(VIEWS.QUIZ);
-    }
-
-    function showStudyComplete() {
-        if (studyControlsShow) studyControlsShow.classList.add('hidden');
-        if (studyControlsRate) studyControlsRate.classList.add('hidden');
-        if (studyComplete) {
-            studyComplete.classList.remove('hidden');
-            const sessionPoints = studyComplete.querySelector('#session-points');
-            if (sessionPoints) {
-                const points = state.studySession.sessionPoints || 0;
-                const cardsReviewed = state.studySession.currentCardIndex;
-                sessionPoints.textContent = `¡Has ganado ${points} puntos en esta sesión! (${cardsReviewed} tarjetas revisadas)`;
-            }
-        }
-    }
-
-});
+}); // Fin DOMContentLoaded

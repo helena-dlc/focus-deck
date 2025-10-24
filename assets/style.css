@@ -1,139 +1,54 @@
-/* Estilos  */
+/* Estilos base si son necesarios (aunque Tailwind ya aplica normalize) */
 body {
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-.view {
-  display: none;
-}
-.view.active {
-  display: block;
+  /* Asegurar que el fondo por defecto sea el oscuro si Tailwind no carga instantáneamente */
+  background-color: #0f172a; /* dark-bg */
 }
 
-/* Animación de Fade-in para las vistas */
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-.animate-fade-in {
-  animation: fadeIn 0.3s ease-out forwards;
-}
-
-.card-inner {
-  transition: transform 0.6s;
-  transform-style: preserve-3d;
-}
-.card.flipped .card-inner {
-  transform: rotateY(180deg);
-}
-.card-face {
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
-}
-.card-back {
-  transform: rotateY(180deg);
-}
-.progress-bar-inner {
-  transition: width 0.3s ease-in-out;
-}
-
-/* Estilos de Scrollbar */
+/* Estilos personalizados para la barra de scroll (Webkit browsers) */
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 8px; /* Ancho del scrollbar */
+  height: 8px; /* Alto para scroll horizontal (si hubiera) */
 }
+
 ::-webkit-scrollbar-track {
-  background: #1e293b; /* dark-card */
+  background: #1e293b; /* dark-card, fondo de la pista */
+  border-radius: 10px;
 }
+
 ::-webkit-scrollbar-thumb {
-  background: #334155; /* dark-border */
-  border-radius: 4px;
+  background-color: #334155; /* dark-border, color del "pulgar" */
+  border-radius: 10px;
+  border: 2px solid #1e293b; /* Espacio alrededor del pulgar */
 }
+
 ::-webkit-scrollbar-thumb:hover {
-  background: #475569; /* slate-600 */
+  background-color: #475569; /* Un poco más claro al pasar el mouse */
 }
 
-/* Clase para perspectiva en el contenedor de la tarjeta */
-.perspective-1000 {
-  perspective: 1000px;
-}
-
-/* Mejoras adicionales para la gestión de vistas */
-.hidden {
-  display: none !important;
-}
-
-/* Asegurar que las transiciones funcionen correctamente */
+/* Clases para transiciones (si no se usan directamente con Tailwind) */
 .view {
-  transition: opacity 0.3s ease-in-out;
+  /* Podríamos añadir transiciones de entrada/salida aquí si quisiéramos */
+  transition: opacity 0.3s ease-out;
 }
 
-.view.active {
-  display: block;
-  opacity: 1;
+/* Estilos específicos si alguna librería los requiere o para overrides */
+
+/* Estilo para la tarjeta flashcard (si queremos añadir la animación flip aquí) */
+/* .card { perspective: 1000px; } */
+/* .card-inner { transition: transform 0.6s; transform-style: preserve-3d; } */
+/* .card.is-flipped .card-inner { transform: rotateY(180deg); } */
+/* .card-front, .card-back { backface-visibility: hidden; } */
+/* .card-back { transform: rotateY(180deg); } */
+
+/* Asegurar que los botones deshabilitados tengan el estilo correcto */
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
-/* Mejoras para las tarjetas de deck */
-.deck-card {
-  min-height: 200px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-}
-
-.deck-card h3 {
-  word-wrap: break-word;
-  overflow-wrap: break-word;
-  hyphens: auto;
-  line-height: 1.2;
-}
-
-.deck-card .flex.gap-2 {
-  gap: 0.25rem; /* Reducir gap entre botones */
-  flex-wrap: nowrap;
-}
-
-.deck-card button {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0; /* Permite que los botones se contraigan */
-  font-size: 0.75rem; /* Texto más pequeño */
-  padding: 0.375rem 0.5rem; /* Padding más pequeño */
-}
-
-.study-deck-btn {
-  flex: 1.5; /* Dar más espacio al botón principal */
-}
-
-.manage-deck-btn,
-.quiz-deck-btn {
-  flex: 1; /* Botones secundarios más pequeños */
-}
-
-/* Responsive para pantallas pequeñas */
-@media (max-width: 640px) {
-  .deck-card .flex.gap-2 {
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  .deck-card button {
-    flex: none;
-    width: 100%;
-    font-size: 0.875rem;
-    padding: 0.5rem 1rem;
-  }
-}
-
-@media (max-width: 768px) {
-  .deck-card button {
-    font-size: 0.75rem;
-    padding: 0.25rem 0.5rem;
-  }
+/* Ajuste fino si es necesario para elementos específicos */
+#task-list,
+#card-list {
+  scrollbar-color: #334155 #1e293b; /* Para Firefox */
+  scrollbar-width: thin; /* Para Firefox */
 }
