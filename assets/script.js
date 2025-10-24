@@ -61,6 +61,7 @@ const defaultState = {
         cardsToReview: [],
         currentCardIndex: 0,
         correctAnswers: 0,
+        sessionPoints: 0,
     }
 };
 let state = { ...defaultState };
@@ -872,46 +873,56 @@ document.addEventListener('DOMContentLoaded', () => {
             const card = cardsToReview[currentCardIndex];
 
             if (card) {
-                // Actualizar estadísticas de la tarjeta
-                card.reviewCount = (card.reviewCount || 0) + 1;
+                // Encontrar la tarjeta original en el deck
+                const deck = state.decks.find(d => d.id === state.currentDeckId);
+                const originalCard = deck.cards.find(c => c.id === card.id);
                 
-                // Calcular próxima fecha de revisión
-                let daysToAdd = 1;
-                switch (difficulty) {
-                    case 'easy':
-                        daysToAdd = 7;
-                        card.difficulty = Math.max(0, (card.difficulty || 0) - 1);
-                        if (isNaN(state.points)) state.points = 0;
-                        state.points += 15;
-                        break;
-                    case 'good':
-                        daysToAdd = 3;
-                        if (isNaN(state.points)) state.points = 0;
-                        state.points += 10;
-                        break;
-                    case 'hard':
-                        daysToAdd = 1;
-                        card.difficulty = (card.difficulty || 0) + 1;
-                        if (isNaN(state.points)) state.points = 0;
-                        state.points += 5;
-                        break;
+                if (originalCard) {
+                    // Actualizar estadísticas de la tarjeta original
+                    originalCard.reviewCount = (originalCard.reviewCount || 0) + 1;
+                    
+                    // Calcular próxima fecha de revisión y puntos
+                    let daysToAdd = 1;
+                    let pointsEarned = 0;
+                    
+                    switch (difficulty) {
+                        case 'easy':
+                            daysToAdd = 7;
+                            originalCard.difficulty = Math.max(0, (originalCard.difficulty || 0) - 1);
+                            pointsEarned = 15;
+                            break;
+                        case 'good':
+                            daysToAdd = 3;
+                            pointsEarned = 10;
+                            break;
+                        case 'hard':
+                            daysToAdd = 1;
+                            originalCard.difficulty = (originalCard.difficulty || 0) + 1;
+                            pointsEarned = 5;
+                            break;
+                    }
+
+                    const nextDate = new Date();
+                    nextDate.setDate(nextDate.getDate() + daysToAdd);
+                    originalCard.nextReviewDate = nextDate.toISOString().split('T')[0];
+
+                    // Actualizar puntos globales y de sesión
+                    if (isNaN(state.points)) state.points = 0;
+                    state.points += pointsEarned;
+                    state.studySession.sessionPoints += pointsEarned;
+
+                    // Actualizar puntos en header
+                    const pointsDisplay = document.getElementById('points');
+                    if (pointsDisplay) pointsDisplay.textContent = `${state.points} pts`;
+
+                    // Pasar a la siguiente tarjeta
+                    state.studySession.currentCardIndex++;
+                    renderStudyView();
+                    
+                    // Registrar actividad y guardar
+                    logStudyActivity();
+                    saveStateToFirestore();
                 }
-
-                const nextDate = new Date();
-                nextDate.setDate(nextDate.getDate() + daysToAdd);
-                card.nextReviewDate = nextDate.toISOString().split('T')[0];
-
-                // Actualizar puntos en header
-                const pointsDisplay = document.getElementById('points');
-                if (pointsDisplay) pointsDisplay.textContent = `${state.points} pts`;
-
-                // Pasar a la siguiente tarjeta
-                state.studySession.currentCardIndex++;
-                renderStudyView();
-                
-                // Registrar actividad
-                logStudyActivity();
-                saveStateToFirestore();
             }
         });
     }
@@ -1038,7 +1049,8 @@ document.addEventListener('DOMContentLoaded', () => {
         state.studySession = {
             cardsToReview: cardsToReview,
             currentCardIndex: 0,
-            correctAnswers: 0
+            correctAnswers: 0,
+            sessionPoints: 0  // Rastrear puntos de la sesión
         };
 
         navigate(VIEWS.STUDY);
@@ -1056,8 +1068,9 @@ document.addEventListener('DOMContentLoaded', () => {
             studyComplete.classList.remove('hidden');
             const sessionPoints = studyComplete.querySelector('#session-points');
             if (sessionPoints) {
-                const points = state.studySession.cardsToReview.length * 10;
-                sessionPoints.textContent = `¡Has ganado ${points} puntos en esta sesión!`;
+                const points = state.studySession.sessionPoints || 0;
+                const cardsReviewed = state.studySession.currentCardIndex;
+                sessionPoints.textContent = `¡Has ganado ${points} puntos en esta sesión! (${cardsReviewed} tarjetas revisadas)`;
             }
         }
     }
