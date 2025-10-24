@@ -59,6 +59,7 @@ const defaultState = {
 let state = { ...defaultState };
 let currentUserId = null;
 let unsubscribeFirestore = null;
+let isLoadingFromFirebase = false;
 
 // ====================================
 // REFERENCIAS DEL DOM
@@ -150,7 +151,7 @@ let confirmCallback = null;
 document.addEventListener('DOMContentLoaded', () => {
     initializeApplication();
 });
-//cambio en declaración 
+
 function initializeApplication() {
     loginBtn?.addEventListener('click', signInWithGoogle);
     addDeckBtn?.addEventListener('click', () => {
@@ -270,14 +271,17 @@ function updateAuthUI(user) {
 // FIRESTORE
 // ====================================
 async function saveStateToFirestore() {
-    if (!currentUserId) return;
+    if (!currentUserId || isLoadingFromFirebase) return;
     
     try {
         const dataToSave = {
             ...state,
             pomodoro: {
-                ...state.pomodoro,
-                isRunning: false
+                duration: state.pomodoro.duration,
+                breakDuration: state.pomodoro.breakDuration,
+                isRunning: state.pomodoro.isRunning,
+                isBreak: state.pomodoro.isBreak,
+                endTime: state.pomodoro.endTime
             },
             decks: state.decks.map(deck => ({
                 ...deck,
@@ -318,10 +322,11 @@ function processLoadedData(data) {
         currentView: VIEWS.DASHBOARD,
         selectedDeckId: null,
         pomodoro: {
-            ...defaultState.pomodoro,
-            ...data.pomodoro,
-            isRunning: false,
-            endTime: null
+            duration: data.pomodoro?.duration || 25,
+            breakDuration: data.pomodoro?.breakDuration || 5,
+            isRunning: data.pomodoro?.isRunning || false,
+            isBreak: data.pomodoro?.isBreak || false,
+            endTime: data.pomodoro?.endTime || null
         }
     };
     
@@ -334,16 +339,33 @@ function listenToUserData() {
     const userDocRef = doc(db, 'users', currentUserId);
     
     unsubscribeFirestore = onSnapshot(userDocRef, (docSnap) => {
+        isLoadingFromFirebase = true;
+        
         if (docSnap.exists()) {
+            const wasRunning = state.pomodoro.isRunning;
             state = processLoadedData(docSnap.data());
+            
+            // Si el pomodoro estaba corriendo, restaurarlo
+            if (state.pomodoro.isRunning && state.pomodoro.endTime) {
+                const remaining = state.pomodoro.endTime - Date.now();
+                if (remaining > 0 && !wasRunning) {
+                    runPomodoro();
+                    if (startPomodoroBtn) {
+                        startPomodoroBtn.textContent = 'Pausar';
+                    }
+                }
+            }
         } else {
             state = { ...defaultState };
             saveStateToFirestore();
         }
+        
         render();
+        isLoadingFromFirebase = false;
     }, (error) => {
         console.error('Error escuchando datos:', error);
         showNotification('Error al cargar datos. Por favor, recarga la página.');
+        isLoadingFromFirebase = false;
     });
 }
 
@@ -380,7 +402,6 @@ function renderDashboard() {
     renderDeckList();
     renderStats();
     updatePomodoroUI();
-    checkRunningPomodoro();
 }
 
 // ====================================
@@ -388,25 +409,33 @@ function renderDashboard() {
 // ====================================
 function startPomodoro() {
     if (state.pomodoro.isRunning) {
+        // Pausar
         state.pomodoro.isRunning = false;
         state.pomodoro.endTime = null;
         clearInterval(pomodoroInterval);
         startPomodoroBtn.textContent = 'Iniciar';
         saveStateToFirestore();
     } else {
+        // Iniciar
         const duration = state.pomodoro.isBreak ? 
             state.pomodoro.breakDuration : 
             state.pomodoro.duration;
         state.pomodoro.endTime = Date.now() + (duration * 60 * 1000);
         state.pomodoro.isRunning = true;
         startPomodoroBtn.textContent = 'Pausar';
-        saveStateToFirestore();
         runPomodoro();
+        saveStateToFirestore();
     }
 }
 
 function runPomodoro() {
+    clearInterval(pomodoroInterval);
     pomodoroInterval = setInterval(() => {
+        if (!state.pomodoro.isRunning || !state.pomodoro.endTime) {
+            clearInterval(pomodoroInterval);
+            return;
+        }
+        
         const remaining = state.pomodoro.endTime - Date.now();
         
         if (remaining <= 0) {
@@ -421,7 +450,9 @@ function updatePomodoroDisplay(milliseconds) {
     const totalSeconds = Math.ceil(milliseconds / 1000);
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
-    pomodoroTimer.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    if (pomodoroTimer) {
+        pomodoroTimer.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    }
 }
 
 function handlePomodoroFinish() {
@@ -451,8 +482,12 @@ function resetPomodoro() {
     const duration = state.pomodoro.isBreak ? 
         state.pomodoro.breakDuration : 
         state.pomodoro.duration;
-    pomodoroTimer.textContent = `${String(duration).padStart(2, '0')}:00`;
-    startPomodoroBtn.textContent = 'Iniciar';
+    if (pomodoroTimer) {
+        pomodoroTimer.textContent = `${String(duration).padStart(2, '0')}:00`;
+    }
+    if (startPomodoroBtn) {
+        startPomodoroBtn.textContent = 'Iniciar';
+    }
     saveStateToFirestore();
 }
 
@@ -462,19 +497,15 @@ function updatePomodoroUI() {
         state.pomodoro.duration;
     
     if (!state.pomodoro.isRunning) {
-        pomodoroTimer.textContent = `${String(duration).padStart(2, '0')}:00`;
-        startPomodoroBtn.textContent = 'Iniciar';
-    }
-}
-
-function checkRunningPomodoro() {
-    if (state.pomodoro.isRunning && state.pomodoro.endTime) {
-        const remaining = state.pomodoro.endTime - Date.now();
-        if (remaining > 0) {
-            runPomodoro();
+        if (pomodoroTimer) {
+            pomodoroTimer.textContent = `${String(duration).padStart(2, '0')}:00`;
+        }
+        if (startPomodoroBtn) {
+            startPomodoroBtn.textContent = 'Iniciar';
+        }
+    } else {
+        if (startPomodoroBtn) {
             startPomodoroBtn.textContent = 'Pausar';
-        } else {
-            handlePomodoroFinish();
         }
     }
 }
@@ -832,6 +863,7 @@ function showNextCard() {
     studyProgressBar.style.width = `${progress}%`;
     
     cardContainer.classList.remove('flipped');
+    cardContainer.classList.remove('hidden');
     document.getElementById('study-controls-show').classList.remove('hidden');
     studyControlsRate.classList.add('hidden');
     studyComplete.classList.add('hidden');
@@ -967,6 +999,8 @@ function renderQuizView() {
     if (!deck) return;
     
     quizDeckName.textContent = `Quiz: ${deck.name}`;
+    quizResults.classList.add('hidden');
+    quizContainer.classList.remove('hidden');
     showQuizQuestion();
 }
 
@@ -982,13 +1016,15 @@ function showQuizQuestion() {
         <div class="bg-dark-card p-6 rounded-2xl shadow-lg max-w-2xl mx-auto">
             <p class="text-sm text-slate-400 mb-4">Pregunta ${quizSession.currentIndex + 1} de ${quizSession.questions.length}</p>
             <h3 class="text-2xl font-bold mb-6">${question.question}</h3>
-            <div class="space-y-3">
+            <div class="space-y-3 mb-6">
                 ${question.options.map((option, index) => `
                     <button class="quiz-option w-full text-left bg-dark-bg hover:bg-slate-700 p-4 rounded-lg transition-colors border-2 border-transparent" data-option-index="${index}">
                         ${option.text}
                     </button>
                 `).join('')}
             </div>
+            <div id="quiz-feedback" class="hidden text-center mb-4 text-lg font-semibold"></div>
+            <button id="next-question-btn" class="hidden w-full bg-primary hover:bg-primary-dark text-dark-bg font-bold py-3 px-6 rounded-full">Siguiente</button>
         </div>
     `;
     
@@ -1008,10 +1044,15 @@ function handleQuizAnswer(optionIndex) {
     question.selectedOption = optionIndex;
     
     const buttons = document.querySelectorAll('.quiz-option');
+    const feedback = document.getElementById('quiz-feedback');
+    const nextBtn = document.getElementById('next-question-btn');
     
+    // Deshabilitar todos los botones
+    buttons.forEach(btn => btn.disabled = true);
+    
+    // Colorear opciones
     question.options.forEach((option, index) => {
         const btn = buttons[index];
-        btn.disabled = true;
         
         if (option.correct) {
             btn.classList.add('border-green-500', 'bg-green-900');
@@ -1020,16 +1061,25 @@ function handleQuizAnswer(optionIndex) {
         }
     });
     
+    // Mostrar feedback
     if (selectedOption.correct) {
         quizSession.score++;
         quizSession.pointsEarned += 10;
         state.points += 10;
+        feedback.textContent = '¡Correcto! +10 puntos';
+        feedback.className = 'text-center mb-4 text-lg font-semibold text-green-400';
+    } else {
+        feedback.textContent = 'Incorrecto. La respuesta correcta está marcada en verde.';
+        feedback.className = 'text-center mb-4 text-lg font-semibold text-red-400';
     }
+    feedback.classList.remove('hidden');
     
-    setTimeout(() => {
+    // Mostrar botón siguiente
+    nextBtn.classList.remove('hidden');
+    nextBtn.addEventListener('click', () => {
         quizSession.currentIndex++;
         showQuizQuestion();
-    }, 1500);
+    });
 }
 
 function showQuizResults() {
@@ -1038,7 +1088,7 @@ function showQuizResults() {
     
     const percentage = Math.round((quizSession.score / quizSession.questions.length) * 100);
     quizScore.textContent = `Puntuación: ${quizSession.score} / ${quizSession.questions.length} (${percentage}%)`;
-    quizPoints.textContent = `Has ganado ${quizSession.pointsEarned} puntos`;
+    quizPoints.textContent = `Has ganado ${quizSession.pointsEarned} puntos en este quiz`;
     
     logStudyActivity();
     saveStateToFirestore();
