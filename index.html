@@ -30,7 +30,7 @@
         }
     </script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="assets/style.css">
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body class="bg-gray-900 text-white min-h-screen font-sans">
     
@@ -350,11 +350,11 @@
     <!-- Create Deck Modal -->
     <div id="createDeckModal" class="modal">
         <div class="modal-content">
-            <div class="flex justify-between items-center mb-6">
+            <button class="modal-close text-gray-400 hover:text-white">
+                <i class="fas fa-times text-xl"></i>
+            </button>
+            <div class="mb-6">
                 <h3 class="text-2xl font-bold">Nuevo Tema de Estudio</h3>
-                <button class="modal-close text-gray-400 hover:text-white">
-                    <i class="fas fa-times text-2xl"></i>
-                </button>
             </div>
             <form id="createDeckForm">
                 <div class="mb-4">
@@ -380,11 +380,11 @@
     <!-- Add Task Modal -->
     <div id="addTaskModal" class="modal">
         <div class="modal-content">
-            <div class="flex justify-between items-center mb-6">
+            <button class="modal-close text-gray-400 hover:text-white">
+                <i class="fas fa-times text-xl"></i>
+            </button>
+            <div class="mb-6">
                 <h3 class="text-2xl font-bold">Nueva Tarea</h3>
-                <button class="modal-close text-gray-400 hover:text-white">
-                    <i class="fas fa-times text-2xl"></i>
-                </button>
             </div>
             <form id="addTaskForm">
                 <div class="mb-4">
@@ -414,11 +414,11 @@
     <!-- Add Card Modal -->
     <div id="addCardModal" class="modal">
         <div class="modal-content max-w-2xl">
-            <div class="flex justify-between items-center mb-6">
+            <button class="modal-close text-gray-400 hover:text-white">
+                <i class="fas fa-times text-xl"></i>
+            </button>
+            <div class="mb-6">
                 <h3 class="text-2xl font-bold">Nueva Flashcard</h3>
-                <button class="modal-close text-gray-400 hover:text-white">
-                    <i class="fas fa-times text-2xl"></i>
-                </button>
             </div>
             <form id="addCardForm">
                 <div class="mb-4">
@@ -452,11 +452,11 @@
     <!-- Study Session Modal -->
     <div id="studyModal" class="modal">
         <div class="modal-content max-w-3xl">
-            <div class="flex justify-between items-center mb-6">
+            <button class="modal-close text-gray-400 hover:text-white">
+                <i class="fas fa-times text-xl"></i>
+            </button>
+            <div class="mb-6">
                 <h3 id="studyDeckTitle" class="text-2xl font-bold">Estudiando...</h3>
-                <button class="modal-close text-gray-400 hover:text-white">
-                    <i class="fas fa-times text-2xl"></i>
-                </button>
             </div>
             
             <div id="studyCard" class="text-center">
@@ -522,7 +522,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
 
     <!-- App Scripts -->
-    <script src="assets/Firebase config.js"></script>
+    <script src="assets/firebase-config.js"></script>
     <script src="assets/app.js"></script>
 </body>
 </html>

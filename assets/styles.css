@@ -153,15 +153,19 @@ body {
 
 /* Modales */
 .modal {
-  @apply fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 opacity-0 pointer-events-none transition-all duration-300;
+  @apply fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 opacity-0 pointer-events-none transition-all duration-300;
+  visibility: hidden;
 }
 
 .modal.active {
   @apply opacity-100 pointer-events-auto;
+  visibility: visible;
 }
 
 .modal-content {
-  @apply bg-gray-800 rounded-2xl p-6 max-w-md w-full border border-gray-700 transform scale-95 transition-all duration-300;
+  @apply bg-gray-800 rounded-2xl p-6 max-w-md w-full border border-gray-700 transform scale-95 transition-all duration-300 relative;
+  max-height: 90vh;
+  overflow-y: auto;
 }
 
 .modal.active .modal-content {
@@ -169,7 +173,24 @@ body {
 }
 
 .modal-close {
-  @apply cursor-pointer transition-colors duration-300;
+  @apply cursor-pointer transition-colors duration-300 absolute top-4 right-4 z-10 w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-700;
+}
+
+/* Mejoras responsive para modales */
+@media (max-width: 768px) {
+  .modal {
+    @apply p-2;
+  }
+
+  .modal-content {
+    @apply p-4 max-w-full;
+    max-height: 95vh;
+  }
+
+  .modal-content.max-w-2xl,
+  .modal-content.max-w-3xl {
+    @apply max-w-full;
+  }
 }
 
 /* Flashcards */

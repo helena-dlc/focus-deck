@@ -1,5 +1,5 @@
 // Focus Deck - Configuración de Firebase
-
+// Reemplaza estos valores con tu configuración de Firebase
 
 const firebaseConfig = {
   apiKey: "AIzaSyC6tqffatZ7NhMm5bGRh0kmjCLymj0DD74",

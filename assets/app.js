@@ -70,6 +70,8 @@ class FocusDeckApp {
     // Modales
     document.querySelectorAll('.modal-close').forEach(btn => {
       btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
         const modal = e.target.closest('.modal');
         this.closeModal(modal);
       });
@@ -82,6 +84,13 @@ class FocusDeckApp {
           this.closeModal(modal);
         }
       });
+    });
+
+    // Cerrar modales con tecla Escape
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        this.closeAllModals();
+      }
     });
 
     // Formularios
@@ -290,25 +299,44 @@ class FocusDeckApp {
   // === MODALES ===
   
   openModal(modalId) {
-    const modal = document.getElementById(modalId);
-    modal.classList.add('active');
+    // Cerrar todos los modales activos primero
+    document.querySelectorAll('.modal.active').forEach(modal => {
+      modal.classList.remove('active');
+    });
     
-    // Focus en el primer input
-    setTimeout(() => {
-      const firstInput = modal.querySelector('input, textarea');
-      if (firstInput) firstInput.focus();
-    }, 100);
+    // Abrir el modal solicitado
+    const modal = document.getElementById(modalId);
+    if (modal) {
+      modal.classList.add('active');
+      
+      // Focus en el primer input después de la animación
+      setTimeout(() => {
+        const firstInput = modal.querySelector('input, textarea');
+        if (firstInput) firstInput.focus();
+      }, 150);
+    }
   }
 
   closeModal(modal) {
     if (typeof modal === 'string') {
       modal = document.getElementById(modal);
     }
-    modal.classList.remove('active');
     
-    // Limpiar formularios
-    const forms = modal.querySelectorAll('form');
-    forms.forEach(form => form.reset());
+    if (modal) {
+      modal.classList.remove('active');
+      
+      // Limpiar formularios después de la animación
+      setTimeout(() => {
+        const forms = modal.querySelectorAll('form');
+        forms.forEach(form => form.reset());
+      }, 300);
+    }
+  }
+
+  closeAllModals() {
+    document.querySelectorAll('.modal.active').forEach(modal => {
+      this.closeModal(modal);
+    });
   }
 
   // === SISTEMA DE PUNTOS ===
