@@ -62,3 +62,18 @@ body {
 .perspective-1000 {
   perspective: 1000px;
 }
+
+/* Mejoras adicionales para la gestión de vistas */
+.hidden {
+  display: none !important;
+}
+
+/* Asegurar que las transiciones funcionen correctamente */
+.view {
+  transition: opacity 0.3s ease-in-out;
+}
+
+.view.active {
+  display: block;
+  opacity: 1;
+}
