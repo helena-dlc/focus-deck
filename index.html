@@ -114,44 +114,42 @@
                     </div>
                 </div>
 
-                <!-- Stats Card (MOVED HERE) -->
-                <div class="bg-dark-card p-6 rounded-2xl shadow-lg mt-8">
+                <!-- Stats Section -->
+                <div class="mt-8 bg-dark-card p-6 rounded-2xl shadow-lg">
                     <h2 class="text-xl font-bold mb-4 flex items-center gap-2"><i data-lucide="bar-chart-3" class="w-6 h-6 text-primary"></i>Estadísticas de Progreso</h2>
-                    <div class="grid grid-cols-2 md:grid-cols-3 gap-4 text-center">
-                        <div>
-                            <div id="stats-streak" class="text-3xl font-bold text-primary">0</div>
-                            <div class="text-sm text-slate-400">Días de Racha</div>
+                    <div class="grid grid-cols-3 gap-4 mb-6">
+                        <div class="text-center">
+                            <div id="stats-streak" class="text-4xl font-bold text-primary">0</div>
+                            <p class="text-sm text-slate-400 mt-1">Días de Racha</p>
                         </div>
-                        <div>
-                            <div id="stats-hours" class="text-3xl font-bold text-primary">0.0</div>
-                            <div class="text-sm text-slate-400">Horas Estudiadas</div>
+                        <div class="text-center">
+                            <div id="stats-hours" class="text-4xl font-bold text-primary">0.0</div>
+                            <p class="text-sm text-slate-400 mt-1">Horas Estudiadas</p>
                         </div>
-                        <div>
-                            <div id="stats-mastery" class="text-3xl font-bold text-primary">0%</div>
-                            <div class="text-sm text-slate-400">Dominio Total</div>
+                        <div class="text-center">
+                            <div id="stats-mastery" class="text-4xl font-bold text-primary">0%</div>
+                            <p class="text-sm text-slate-400 mt-1">Dominio Total</p>
                         </div>
                     </div>
-                     <!-- Avance por temas -->
-                    <h3 class="text-lg font-semibold mt-6 mb-2">Avance por Tema</h3>
-                    <div id="stats-deck-progress" class="space-y-2">
-                        <!-- Progress bars will be rendered here -->
+                    <h3 class="font-bold mb-3">Avance por Tema</h3>
+                    <div id="deck-stats-list" class="space-y-2">
+                        <!-- Deck stats will be rendered here -->
                     </div>
                 </div>
-
             </div>
 
             <!-- Study View -->
             <div id="study-view" class="view">
-                 <button id="back-to-dashboard-study" class="mb-4 bg-dark-card hover:bg-slate-600 p-2 rounded-full"><i data-lucide="arrow-left" class="w-6 h-6"></i></button>
-                <h2 id="study-deck-name" class="text-3xl font-bold text-center mb-2"></h2>
-                <p id="study-progress-text" class="text-center text-slate-400 mb-4">Progreso: 0/0</p>
-                <div id="study-progress-bar" class="w-full bg-dark-card rounded-full h-2.5 mb-6">
-                  <div class="bg-primary h-2.5 rounded-full progress-bar-inner" style="width: 0%"></div>
+                <button id="back-to-dashboard-study" class="mb-4 bg-dark-card hover:bg-slate-600 p-2 rounded-full"><i data-lucide="arrow-left" class="w-6 h-6"></i></button>
+                <h2 id="study-deck-name" class="text-3xl font-bold text-center mb-4"></h2>
+                <p id="study-progress" class="text-center text-slate-400 mb-2">0 / 0</p>
+                <div class="w-full bg-dark-border rounded-full h-2 mb-8">
+                    <div id="study-progress-bar" class="progress-bar-inner bg-primary h-2 rounded-full" style="width: 0%"></div>
                 </div>
 
-                <div id="flashcard-container" class="perspective-1000">
-                    <div class="card relative w-full h-80">
-                        <div class="card-inner w-full h-full">
+                <div class="perspective-1000 mb-8">
+                    <div id="card-container" class="card relative w-full max-w-2xl mx-auto" style="height: 400px;">
+                        <div class="card-inner relative w-full h-full">
                             <div id="card-front" class="card-face absolute w-full h-full bg-dark-card rounded-2xl p-6 flex flex-col items-center justify-center text-center">
                                 <img id="card-front-img" src="" class="max-h-40 mb-4 hidden rounded-lg" onerror="this.style.display='none'; this.src=''">
                                 <p class="text-2xl"></p>
