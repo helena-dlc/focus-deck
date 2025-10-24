@@ -196,737 +196,739 @@ document.addEventListener('DOMContentLoaded', () => {
             await setDoc(userDocRef, stateToSave, { merge: true });
         } catch (error) {
             console.error("Error guardando estado en Firestore: ", error);
-            showNotification("Error al guardar tu progreso. Revisa tu conexión.");
         }
-    }
-
-    function listenToUserData(userId) {
-        if (unsubscribeFromFirestore) {
-            unsubscribeFromFirestore();
-        }
-        
-        const userDocRef = doc(db, "users", userId);
-        
-        unsubscribeFromFirestore = onSnapshot(userDocRef, (docSnap) => {
-            if (docSnap.exists()) {
-                const firestoreData = docSnap.data();
-                state = { ...defaultState, ...firestoreData };
-
-                // --- MIGRACIÓN DE DATOS ---
-                const defaultPomodoro = { timer: null, timeLeft: 25 * 60, isBreak: false, isRunning: false, endTime: null };
-                state.pomodoro = { ...defaultPomodoro, ...(state.pomodoro || {}) };
-                if (state.pomodoro.isRunning) {
-                    state.pomodoro.isRunning = false; 
-                }
-                
-                state.studySession = defaultState.studySession; 
-                
-                if (state.decks) {
-                    state.decks.forEach(deck => {
-                        if (deck.cards) {
-                            deck.cards.forEach(card => {
-                                card.questionImg = card.questionImg || null;
-                                card.answerImg = card.answerImg || null;
-                                if (card.nextReviewDate && card.nextReviewDate.toDate) {
-                                    card.nextReviewDate = card.nextReviewDate.toDate().toISOString().split('T')[0];
-                                } else if (!card.nextReviewDate) {
-                                    card.nextReviewDate = getTodayString();
-                                }
-                            });
-                        }
-                    });
-                }
-                
-            } else {
-                console.log("Usuario nuevo, creando documento...");
-                state = { ...defaultState };
-                saveStateToFirestore(); 
-            }
-            
-            render();
-            checkRunningPomodoro();
-            
-        }, (error) => {
-            console.error("Error escuchando datos de Firestore: ", error);
-            showNotification("Error al cargar tus datos. Intenta recargar la página.");
-        });
     }
     
-    async function logStudyActivity() {
+    function logStudyActivity() {
         const today = getTodayString();
-        if (!state.studyLog.includes(today)) {
-            console.log("Registrando actividad de estudio para la racha de hoy.");
-            state.studyLog.push(today);
-            
-            if (currentUserId) {
-                try {
-                    const userDocRef = doc(db, "users", currentUserId);
-                    await updateDoc(userDocRef, {
-                        studyLog: arrayUnion(today)
-                    });
-                } catch(e) {
-                    console.error("Error actualizando studyLog: ", e);
-                    await saveStateToFirestore();
-                }
-            }
-            renderStats();
-        }
-    }
-
-
-    // --- Lógica de Autenticación (¡CORREGIDA!) ---
-
-    /**
-     * Maneja el estado de autenticación del usuario.
-     */
-    onAuthStateChanged(auth, (user) => {
-        if (user) {
-            // Usuario está logueado
-            currentUserId = user.uid;
-            console.log("Usuario logueado:", currentUserId);
-            
-            // --- ¡CORRECCIÓN AQUÍ! ---
-            // Ocultamos el modal de login
-            authContainer.classList.add('hidden');
-            // Mostramos la app principal
-            mainContent.classList.remove('hidden');
-            
-            // Mostramos la info del usuario en el header
-            if (user.photoURL) {
-                userProfilePic.src = user.photoURL;
-                userProfilePic.classList.remove('hidden');
-            }
-            logoutBtn.classList.remove('hidden');
-            pointsContainer.classList.remove('hidden'); // Mostrar puntos
-
-            // Empezamos a escuchar los datos de ESTE usuario
-            listenToUserData(currentUserId);
-            
+        const todayLogIndex = state.studyLog.findIndex(log => log.date === today);
+        
+        if (todayLogIndex !== -1) {
+            state.studyLog[todayLogIndex].sessions++;
         } else {
-            // Usuario está deslogueado
-            currentUserId = null;
-            console.log("Usuario deslogueado.");
-
-            // --- ¡CORRECCIÓN AQUÍ! ---
-            // Mostramos el modal de login
-            authContainer.classList.remove('hidden');
-            // Ocultamos la app principal
-            mainContent.classList.add('hidden');
-            
-            // Ocultamos info de usuario en el header
-            userProfilePic.classList.add('hidden');
-            logoutBtn.classList.add('hidden');
-            pointsContainer.classList.add('hidden'); // Ocultar puntos
-            
-            // Dejamos de escuchar datos
-            if (unsubscribeFromFirestore) {
-                unsubscribeFromFirestore();
-                unsubscribeFromFirestore = null;
-            }
-            
-            // Reseteamos el estado al por defecto
-            state = { ...defaultState };
-            render(); // Renderizará un dashboard vacío (que está oculto)
+            state.studyLog.push({
+                date: today,
+                sessions: 1
+            });
         }
-    });
-
-    /**
-     * Inicia el pop-up de login con Google
-     */
-    loginBtn.addEventListener('click', async () => {
-        const provider = new GoogleAuthProvider();
-        try {
-            await signInWithPopup(auth, provider);
-            // onAuthStateChanged se encargará del resto
-        } catch (error) {
-            console.error("Error al iniciar sesión: ", error);
-            if (error.code !== 'auth/popup-closed-by-user') {
-                showNotification("Error al iniciar sesión. Inténtalo de nuevo.");
-            }
-        }
-    });
-
-    /**
-     * Cierra la sesión del usuario
-     */
-    logoutBtn.addEventListener('click', async () => {
-        try {
-            await signOut(auth);
-            // onAuthStateChanged se encargará del resto
-        } catch (error) {
-            console.error("Error al cerrar sesión: ", error);
-            showNotification("Error al cerrar sesión.");
-        }
-    });
-
-
-    // --- Lógica de la App ---
-
-    function navigate(viewId) {
-        state.currentView = viewId;
-        render();
     }
 
-    function render() {
-        views.forEach(v => v.classList.add('hidden'));
-
-        switch (state.currentView) {
-            case VIEWS.DASHBOARD:
-                renderDashboard();
-                dashboardView.classList.remove('hidden');
-                break;
-            case VIEWS.MANAGE:
-                renderManageView();
-                manageDeckView.classList.remove('hidden');
-                break;
-            case VIEWS.STUDY:
-                renderStudyView();
-                studyView.classList.remove('hidden');
-                break;
-            case VIEWS.QUIZ:
-                renderQuizView();
-                quizView.classList.remove('hidden');
-                break;
-            default:
-                renderDashboard();
-                dashboardView.classList.remove('hidden');
+    // --- Utilidades de Estudio ---
+    
+    function isCardDueForReview(card) {
+        if (!card.nextReviewDate) return true;
+        
+        let reviewDate;
+        if (card.nextReviewDate instanceof Timestamp) {
+            reviewDate = card.nextReviewDate.toDate();
+        } else {
+            reviewDate = new Date(card.nextReviewDate);
         }
         
-        pointsEl.textContent = state.points;
-        updatePomodoroUI();
-        lucide.createIcons();
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        return reviewDate <= today;
     }
 
-    // --- Render Dashboard ---
+    function updateCardReviewDate(card, difficulty) {
+        const today = new Date();
+        let daysToAdd;
+        
+        switch (difficulty) {
+            case 'again':
+                daysToAdd = 1;
+                break;
+            case 'hard':
+                daysToAdd = card.easeFactor ? Math.max(1, Math.round(card.interval * 0.8)) : 2;
+                break;
+            case 'good':
+                daysToAdd = card.easeFactor ? Math.round(card.interval * card.easeFactor) : 3;
+                break;
+            case 'easy':
+                daysToAdd = card.easeFactor ? Math.round(card.interval * card.easeFactor * 1.3) : 5;
+                break;
+            default:
+                daysToAdd = 1;
+        }
+        
+        card.interval = daysToAdd;
+        card.easeFactor = card.easeFactor || 2.5;
+        
+        if (difficulty === 'again') {
+            card.easeFactor = Math.max(1.3, card.easeFactor - 0.2);
+        } else if (difficulty === 'hard') {
+            card.easeFactor = Math.max(1.3, card.easeFactor - 0.15);
+        } else if (difficulty === 'easy') {
+            card.easeFactor = card.easeFactor + 0.15;
+        }
+        
+        const nextReview = new Date(today);
+        nextReview.setDate(today.getDate() + daysToAdd);
+        card.nextReviewDate = Timestamp.fromDate(nextReview);
+        
+        card.reviewCount = (card.reviewCount || 0) + 1;
+        card.lastReviewed = Timestamp.now();
+    }
+
+    function calculateMasteryLevel(card) {
+        if (!card.reviewCount) return 0;
+        
+        const reviewCount = card.reviewCount;
+        const interval = card.interval || 1;
+        
+        if (reviewCount >= 5 && interval >= 21) return 100; // Dominado
+        if (reviewCount >= 3 && interval >= 7) return 75;   // Avanzado
+        if (reviewCount >= 2 && interval >= 3) return 50;   // Intermedio
+        if (reviewCount >= 1) return 25;                    // Principiante
+        return 0; // Sin revisar
+    }
+
+    // --- Navegación ---
+    
+    function navigate(view) {
+        views.forEach(v => v.classList.add('hidden'));
+        document.getElementById(view).classList.remove('hidden');
+        state.currentView = view;
+        
+        if (view === VIEWS.DASHBOARD) {
+            renderDashboard();
+        }
+    }
+
+    // --- Renderizado Dashboard ---
+    
     function renderDashboard() {
-        renderTaskList();
-        renderDeckList();
-        renderStats();
+        pointsEl.textContent = state.points;
+        renderDecks();
+        renderTasks();
+        updateStats();
+        updatePomodoroUI();
     }
 
-    // --- Lógica de Tareas ---
-    function renderTaskList() {
-        taskList.innerHTML = '';
-        if (state.tasks.length === 0) {
-            taskList.innerHTML = '<p class="text-sm text-slate-400 px-3">No hay tareas pendientes. ¡Añade una!</p>';
+    function renderDecks() {
+        if (!deckList) return;
+        
+        deckList.innerHTML = '';
+        
+        if (state.decks.length === 0) {
+            noDecksMessage?.classList.remove('hidden');
             return;
         }
+        
+        noDecksMessage?.classList.add('hidden');
+        
+        state.decks.forEach(deck => {
+            const deckEl = document.createElement('div');
+            deckEl.className = 'bg-slate-700 p-6 rounded-lg border border-slate-600';
+            
+            const totalCards = deck.cards ? deck.cards.length : 0;
+            const dueCards = deck.cards ? deck.cards.filter(isCardDueForReview).length : 0;
+            const masteredCards = deck.cards ? deck.cards.filter(card => calculateMasteryLevel(card) === 100).length : 0;
+            
+            deckEl.innerHTML = `
+                <h3 class="text-lg font-semibold text-slate-200 mb-3">${deck.name}</h3>
+                <div class="space-y-2 text-sm text-slate-400 mb-4">
+                    <div class="flex justify-between">
+                        <span>Total de cartas:</span>
+                        <span>${totalCards}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>Para revisar:</span>
+                        <span class="text-teal-400">${dueCards}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>Dominadas:</span>
+                        <span class="text-green-400">${masteredCards}</span>
+                    </div>
+                </div>
+                <div class="flex gap-2">
+                    <button 
+                        class="flex-1 bg-teal-600 hover:bg-teal-500 text-white px-4 py-2 rounded-lg text-sm transition-colors study-btn"
+                        data-deck-id="${deck.id}"
+                        ${dueCards === 0 ? 'disabled' : ''}
+                    >
+                        ${dueCards === 0 ? 'No hay cartas para revisar' : 'Estudiar'}
+                    </button>
+                    <button class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm transition-colors quiz-btn" data-deck-id="${deck.id}">
+                        Quiz
+                    </button>
+                    <button class="bg-slate-600 hover:bg-slate-500 text-white px-4 py-2 rounded-lg text-sm transition-colors manage-btn" data-deck-id="${deck.id}">
+                        Gestionar
+                    </button>
+                </div>
+            `;
+            
+            deckList.appendChild(deckEl);
+        });
+        
+        // Event listeners para botones de deck
+        deckList.querySelectorAll('.study-btn:not([disabled])').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const deckId = e.target.dataset.deckId;
+                startStudySession(deckId);
+            });
+        });
+        
+        deckList.querySelectorAll('.quiz-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const deckId = e.target.dataset.deckId;
+                startQuiz(deckId);
+            });
+        });
+        
+        deckList.querySelectorAll('.manage-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const deckId = e.target.dataset.deckId;
+                manageDeck(deckId);
+            });
+        });
+    }
 
-        const priorityOrder = { 'Alta': 3, 'Media': 2, 'Baja': 1 };
+    function renderTasks() {
+        if (!taskList) return;
+        
+        taskList.innerHTML = '';
+        
         const sortedTasks = [...state.tasks].sort((a, b) => {
-            if (priorityOrder[a.priority] !== priorityOrder[b.priority]) {
+            const priorityOrder = { 'alta': 3, 'media': 2, 'baja': 1 };
+            if (a.completed === b.completed) {
                 return priorityOrder[b.priority] - priorityOrder[a.priority];
             }
-            return b.id - a.id;
+            return a.completed ? 1 : -1;
         });
-
+        
         sortedTasks.forEach(task => {
             const taskEl = document.createElement('div');
-            const priorityColor = {
-                'Alta': 'border-red-500',
-                'Media': 'border-yellow-500',
-                'Baja': 'border-teal-500',
-            }[task.priority];
-
-            taskEl.className = `flex items-center justify-between p-3 bg-slate-800 rounded-lg border-l-4 ${priorityColor} mb-2 group`;
+            taskEl.className = `flex items-center gap-3 p-3 rounded-lg border ${
+                task.completed 
+                    ? 'bg-slate-800 border-slate-700 opacity-60' 
+                    : 'bg-slate-700 border-slate-600'
+            }`;
+            
+            const priorityColors = {
+                'alta': 'bg-red-500',
+                'media': 'bg-yellow-500',
+                'baja': 'bg-green-500'
+            };
+            
             taskEl.innerHTML = `
-                <div class="flex items-center">
-                    <button data-task-id="${task.id}" class="complete-task-btn p-1 text-slate-400 hover:text-white mr-3">
-                        <i data-lucide="circle" class="w-5 h-5"></i>
-                    </button>
-                    <span class="text-slate-200">${task.text}</span>
-                </div>
-                <button data-task-id="${task.id}" class="delete-task-btn p-1 text-slate-500 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button class="w-5 h-5 rounded border-2 border-slate-400 flex items-center justify-center transition-colors ${
+                    task.completed ? 'bg-teal-500 border-teal-500' : 'hover:border-teal-400'
+                }" data-task-id="${task.id}">
+                    ${task.completed ? '<i data-lucide="check" class="w-3 h-3 text-white"></i>' : ''}
+                </button>
+                <div class="w-3 h-3 rounded-full ${priorityColors[task.priority]}"></div>
+                <span class="flex-1 text-slate-200 ${task.completed ? 'line-through' : ''}">${task.text}</span>
+                <button class="text-slate-400 hover:text-red-400 delete-task-btn" data-task-id="${task.id}">
                     <i data-lucide="trash-2" class="w-4 h-4"></i>
                 </button>
             `;
+            
             taskList.appendChild(taskEl);
         });
-    }
-
-    addTaskBtn.addEventListener('click', () => {
-        const text = taskInput.value.trim();
-        const priority = taskPriority.value;
-        if (text) {
-            state.tasks.push({
-                id: Date.now(),
-                text,
-                priority,
-                completed: false
-            });
-            taskInput.value = '';
-            renderTaskList();
-            saveStateToFirestore();
-        }
-    });
-
-    taskList.addEventListener('click', (e) => {
-        const completeBtn = e.target.closest('.complete-task-btn');
-        const deleteBtn = e.target.closest('.delete-task-btn');
-
-        if (completeBtn) {
-            const taskId = Number(completeBtn.dataset.taskId);
-            state.tasks = state.tasks.filter(t => t.id !== taskId);
-            state.points += 10;
-            logStudyActivity();
-            render();
-            saveStateToFirestore();
-            showNotification("¡Tarea completada! +10 puntos");
-        }
-
-        if (deleteBtn) {
-            const taskId = Number(deleteBtn.dataset.taskId);
-            state.tasks = state.tasks.filter(t => t.id !== taskId);
-            renderTaskList();
-            saveStateToFirestore();
-        }
-    });
-
-    // --- Lógica de Temas (Decks) ---
-    function renderDeckList() {
-        deckList.innerHTML = '';
-        if (state.decks.length === 0) {
-            noDecksMessage.classList.remove('hidden');
-            return;
-        }
         
-        noDecksMessage.classList.add('hidden');
-        const today = getTodayString();
-
-        state.decks.forEach(deck => {
-            const cardsToReview = deck.cards.filter(c => c.nextReviewDate <= today).length;
-            const deckEl = document.createElement('div');
-            deckEl.className = 'bg-slate-800 p-5 rounded-lg shadow-lg flex flex-col justify-between';
-            deckEl.innerHTML = `
-                <div>
-                    <h3 class="text-xl font-bold text-white truncate mb-2">${deck.name}</h3>
-                    <p class="text-sm text-slate-400 mb-4">${deck.cards.length} tarjeta(s)</p>
-                    ${cardsToReview > 0 
-                        ? `<span class="inline-block bg-teal-600 text-teal-100 text-xs font-semibold px-2 py-1 rounded-full mb-4">${cardsToReview} para repasar hoy</span>`
-                        : `<span class="inline-block bg-slate-700 text-slate-300 text-xs font-semibold px-2 py-1 rounded-full mb-4">¡Al día!</span>`
-                    }
-                </div>
-                <div class="flex gap-2">
-                    <button data-deck-id="${deck.id}" class="study-deck-btn flex-1 bg-teal-600 hover:bg-teal-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors ${cardsToReview === 0 ? 'opacity-50 cursor-not-allowed' : ''}" ${cardsToReview === 0 ? 'disabled' : ''}>
-                        Estudiar
-                    </button>
-                    <button data-deck-id="${deck.id}" class="quiz-deck-btn flex-1 bg-slate-700 hover:bg-slate-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors ${deck.cards.length < 4 ? 'opacity-50 cursor-not-allowed' : ''}" ${deck.cards.length < 4 ? 'disabled' : ''}>
-                        Quiz
-                    </button>
-                    <button data-deck-id="${deck.id}" class="manage-deck-btn bg-slate-700 hover:bg-slate-600 text-white font-semibold py-2 px-3 rounded-lg transition-colors">
-                        <i data-lucide="settings-2" class="w-5 h-5"></i>
-                    </button>
-                </div>
-            `;
-            deckList.appendChild(deckEl);
-        });
-    }
-
-    newDeckBtn.addEventListener('click', () => {
-        const deckName = prompt("Introduce el nombre del nuevo tema:");
-        if (deckName && deckName.trim()) {
-            const newDeck = {
-                id: 'deck_' + Date.now(),
-                name: deckName.trim(),
-                cards: []
-            };
-            state.decks.push(newDeck);
-            state.currentDeckId = newDeck.id;
-            navigate(VIEWS.MANAGE);
-            saveStateToFirestore();
-        }
-    });
-
-    deckList.addEventListener('click', (e) => {
-        const studyBtn = e.target.closest('.study-deck-btn');
-        const quizBtn = e.target.closest('.quiz-deck-btn');
-        const manageBtn = e.target.closest('.manage-deck-btn');
-
-        if (studyBtn) {
-            state.currentDeckId = studyBtn.dataset.deckId;
-            startStudySession();
-            navigate(VIEWS.STUDY);
-        }
-        if (quizBtn) {
-            state.currentDeckId = quizBtn.dataset.deckId;
-            startQuiz();
-            navigate(VIEWS.QUIZ);
-        }
-        if (manageBtn) {
-            state.currentDeckId = manageBtn.dataset.deckId;
-            navigate(VIEWS.MANAGE);
-        }
-    });
-    
-    // --- Lógica de Estadísticas ---
-    function renderStats() {
-        const today = getTodayString();
-        const streak = calculateStreak(today, state.studyLog);
-        streakEl.textContent = streak;
-
-        const totalHours = (state.studyTimeMinutes / 60).toFixed(1);
-        studyTimeEl.textContent = totalHours;
-
-        let totalCards = 0;
-        let totalMasteredCards = 0;
-        domainByDeckList.innerHTML = '';
-
-        if (state.decks.length === 0) {
-            domainByDeckList.innerHTML = '<p class="text-sm text-slate-400 px-3">Añade temas para ver tu progreso.</p>';
-        }
-
-        state.decks.forEach(deck => {
-            if (deck.cards.length > 0) {
-                const masteredCards = deck.cards.filter(c => getNextInterval(c.interval || 0, 'easy') >= 21).length;
-                const domain = (masteredCards / deck.cards.length) * 100;
-
-                totalCards += deck.cards.length;
-                totalMasteredCards += masteredCards;
-
-                const deckStatEl = document.createElement('div');
-                deckStatEl.className = 'mb-3 px-3';
-                deckStatEl.innerHTML = `
-                    <div class="flex justify-between items-center mb-1">
-                        <span class="text-sm text-slate-300 truncate">${deck.name}</span>
-                        <span class="text-sm font-semibold text-white">${Math.round(domain)}%</span>
-                    </div>
-                    <div class="w-full bg-slate-700 rounded-full h-2">
-                        <div class="bg-teal-500 h-2 rounded-full" style="width: ${domain}%"></div>
-                    </div>
-                `;
-                domainByDeckList.appendChild(deckStatEl);
+        lucide.createIcons();
+        
+        // Event listeners para tareas
+        taskList.querySelectorAll('button[data-task-id]').forEach(btn => {
+            if (btn.classList.contains('delete-task-btn')) {
+                btn.addEventListener('click', (e) => {
+                    const taskId = e.target.closest('button').dataset.taskId;
+                    deleteTask(taskId);
+                });
+            } else {
+                btn.addEventListener('click', (e) => {
+                    const taskId = e.target.closest('button').dataset.taskId;
+                    toggleTask(taskId);
+                });
             }
         });
-
-        const globalDomain = (totalCards > 0) ? (totalMasteredCards / totalCards) * 100 : 0;
-        totalDomainEl.textContent = `${Math.round(globalDomain)}%`;
     }
 
-    function calculateStreak(todayString, studyLog) {
-        let streak = 0;
-        const dates = new Set(studyLog);
+    function updateStats() {
+        // Calcular racha de días
+        const streak = calculateStudyStreak();
+        if (streakEl) streakEl.textContent = streak;
         
-        if (dates.size === 0) return 0;
+        // Tiempo total de estudio
+        if (studyTimeEl) studyTimeEl.textContent = `${Math.floor(state.studyTimeMinutes / 60)}h ${state.studyTimeMinutes % 60}m`;
         
-        let currentDate = new Date(todayString + 'T00:00:00');
-
-        while (dates.has(currentDate.toISOString().split('T')[0])) {
-            streak++;
-            currentDate.setDate(currentDate.getDate() - 1);
+        // Dominio total
+        const totalCards = state.decks.reduce((acc, deck) => acc + (deck.cards ? deck.cards.length : 0), 0);
+        const masteredCards = state.decks.reduce((acc, deck) => 
+            acc + (deck.cards ? deck.cards.filter(card => calculateMasteryLevel(card) === 100).length : 0), 0
+        );
+        const domainPercentage = totalCards > 0 ? Math.round((masteredCards / totalCards) * 100) : 0;
+        if (totalDomainEl) totalDomainEl.textContent = `${domainPercentage}%`;
+        
+        // Dominio por tema
+        if (domainByDeckList) {
+            domainByDeckList.innerHTML = '';
+            state.decks.forEach(deck => {
+                const deckCards = deck.cards ? deck.cards.length : 0;
+                const deckMastered = deck.cards ? deck.cards.filter(card => calculateMasteryLevel(card) === 100).length : 0;
+                const deckPercentage = deckCards > 0 ? Math.round((deckMastered / deckCards) * 100) : 0;
+                
+                const deckStatEl = document.createElement('div');
+                deckStatEl.className = 'flex justify-between text-sm';
+                deckStatEl.innerHTML = `
+                    <span class="text-slate-300">${deck.name}</span>
+                    <span class="text-slate-400">${deckPercentage}%</span>
+                `;
+                domainByDeckList.appendChild(deckStatEl);
+            });
         }
+    }
+
+    function calculateStudyStreak() {
+        if (state.studyLog.length === 0) return 0;
         
-        if (!dates.has(todayString)) {
-            let yesterday = new Date(todayString + 'T00:00:00');
-            yesterday.setDate(yesterday.getDate() - 1);
-            if (dates.has(yesterday.toISOString().split('T')[0])) {
-                streak = 0;
-                currentDate = yesterday;
-                while (dates.has(currentDate.toISOString().split('T')[0])) {
-                    streak++;
-                    currentDate.setDate(currentDate.getDate() - 1);
-                }
-                return streak;
+        const sortedLog = [...state.studyLog].sort((a, b) => new Date(b.date) - new Date(a.date));
+        const today = getTodayString();
+        
+        let streak = 0;
+        let currentDate = new Date(today);
+        
+        for (const log of sortedLog) {
+            const logDate = log.date;
+            const currentDateStr = currentDate.toISOString().split('T')[0];
+            
+            if (logDate === currentDateStr) {
+                streak++;
+                currentDate.setDate(currentDate.getDate() - 1);
             } else {
-                return 0;
+                break;
             }
         }
         
         return streak;
     }
 
+    // --- Gestión de Tareas ---
+    
+    function addTask() {
+        const text = taskInput.value.trim();
+        const priority = taskPriority.value;
+        
+        if (!text) return;
+        
+        const newTask = {
+            id: Date.now().toString(),
+            text,
+            priority,
+            completed: false,
+            createdAt: new Date().toISOString()
+        };
+        
+        state.tasks.push(newTask);
+        taskInput.value = '';
+        renderTasks();
+        saveStateToFirestore();
+        
+        showNotification('Tarea agregada');
+    }
 
-    // --- Lógica de Gestionar Tema (Manage) ---
-    function renderManageView() {
-        const deck = state.decks.find(d => d.id === state.currentDeckId);
-        if (!deck) {
-            navigate(VIEWS.DASHBOARD);
-            return;
+    function toggleTask(taskId) {
+        const task = state.tasks.find(t => t.id === taskId);
+        if (task) {
+            task.completed = !task.completed;
+            if (task.completed) {
+                state.points += 5;
+                showNotification('Tarea completada! +5 puntos');
+            }
+            renderTasks();
+            renderDashboard();
+            saveStateToFirestore();
         }
+    }
 
+    function deleteTask(taskId) {
+        state.tasks = state.tasks.filter(t => t.id !== taskId);
+        renderTasks();
+        saveStateToFirestore();
+        showNotification('Tarea eliminada');
+    }
+
+    // Event listeners para tareas
+    addTaskBtn?.addEventListener('click', addTask);
+    taskInput?.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') addTask();
+    });
+
+    // --- Gestión de Decks ---
+    
+    function createNewDeck() {
+        const deckName = prompt('Nombre del nuevo tema de estudio:');
+        if (!deckName || !deckName.trim()) return;
+        
+        const newDeck = {
+            id: Date.now().toString(),
+            name: deckName.trim(),
+            cards: [],
+            createdAt: new Date().toISOString()
+        };
+        
+        state.decks.push(newDeck);
+        renderDashboard();
+        saveStateToFirestore();
+        showNotification('Nuevo tema creado');
+        
+        // Ir directamente a gestionar el nuevo deck
+        manageDeck(newDeck.id);
+    }
+
+    function manageDeck(deckId) {
+        const deck = state.decks.find(d => d.id === deckId);
+        if (!deck) return;
+        
+        state.currentDeckId = deckId;
         manageDeckTitle.textContent = deck.name;
+        
+        renderManageDeckView(deck);
+        navigate(VIEWS.MANAGE);
+    }
+
+    function renderManageDeckView(deck) {
         cardList.innerHTML = '';
         
-        if (deck.cards.length === 0) {
-            cardList.innerHTML = '<p class="text-sm text-slate-400 px-3">No hay tarjetas. ¡Añade la primera!</p>';
+        if (!deck.cards || deck.cards.length === 0) {
+            cardList.innerHTML = '<p class="text-slate-400 text-center py-8">No hay cartas en este tema. ¡Agrega la primera!</p>';
             return;
         }
-
-        deck.cards.forEach(card => {
+        
+        deck.cards.forEach((card, index) => {
             const cardEl = document.createElement('div');
-            cardEl.className = 'bg-slate-800 p-4 rounded-lg mb-2 flex justify-between items-start group';
+            cardEl.className = 'bg-slate-700 p-4 rounded-lg border border-slate-600';
+            
+            const masteryLevel = calculateMasteryLevel(card);
+            const masteryColor = masteryLevel >= 75 ? 'text-green-400' : masteryLevel >= 50 ? 'text-yellow-400' : 'text-red-400';
+            
             cardEl.innerHTML = `
-                <div class="flex-1 overflow-hidden">
-                    ${card.questionImg ? `<img src="${card.questionImg}" class="max-w-full h-auto max-h-20 rounded mb-2" onerror="this.style.display='none'">` : ''}
-                    <p class="text-slate-300 font-semibold truncate"><strong class="text-teal-400">P:</strong> ${card.question}</p>
-                    ${card.answerImg ? `<img src="${card.answerImg}" class="max-w-full h-auto max-h-20 rounded mt-2 mb-2" onerror="this.style.display='none'">` : ''}
-                    <p class="text-slate-300 truncate"><strong class="text-teal-400">R:</strong> ${card.answer}</p>
+                <div class="flex justify-between items-start mb-3">
+                    <h4 class="font-medium text-slate-200">Carta ${index + 1}</h4>
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs ${masteryColor}">${masteryLevel}% dominada</span>
+                        <button class="text-slate-400 hover:text-red-400 delete-card-btn" data-card-index="${index}">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        </button>
+                    </div>
                 </div>
-                <button data-card-id="${card.id}" class="delete-card-btn p-1 text-slate-500 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity ml-4">
-                    <i data-lucide="trash-2" class="w-4 h-4"></i>
-                </button>
+                <div class="space-y-3">
+                    <div>
+                        <label class="text-xs text-slate-400 uppercase tracking-wide">Pregunta</label>
+                        <p class="text-slate-200 mt-1">${card.question}</p>
+                        ${card.questionImg ? `<img src="${card.questionImg}" alt="Imagen pregunta" class="mt-2 max-w-xs rounded">` : ''}
+                    </div>
+                    <div>
+                        <label class="text-xs text-slate-400 uppercase tracking-wide">Respuesta</label>
+                        <p class="text-slate-200 mt-1">${card.answer}</p>
+                        ${card.answerImg ? `<img src="${card.answerImg}" alt="Imagen respuesta" class="mt-2 max-w-xs rounded">` : ''}
+                    </div>
+                </div>
             `;
+            
             cardList.appendChild(cardEl);
+        });
+        
+        lucide.createIcons();
+        
+        // Event listeners para eliminar cartas
+        cardList.querySelectorAll('.delete-card-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const cardIndex = parseInt(e.target.closest('button').dataset.cardIndex);
+                deleteCard(deck.id, cardIndex);
+            });
         });
     }
 
-    addCardForm.addEventListener('submit', (e) => {
-        e.preventDefault();
+    function addCard() {
         const deck = state.decks.find(d => d.id === state.currentDeckId);
-        if (deck) {
-            const newCard = {
-                id: 'card_' + Date.now(),
-                question: cardQuestionInput.value.trim(),
-                answer: cardAnswerInput.value.trim(),
-                questionImg: cardQuestionImgInput.value.trim() || null,
-                answerImg: cardAnswerImgInput.value.trim() || null,
-                interval: 0,
-                easeFactor: 2.5,
-                nextReviewDate: getTodayString()
-            };
-            deck.cards.push(newCard);
-            renderManageView();
-            saveStateToFirestore();
-            addCardForm.reset();
+        if (!deck) return;
+        
+        const question = cardQuestionInput.value.trim();
+        const answer = cardAnswerInput.value.trim();
+        
+        if (!question || !answer) {
+            showNotification('La pregunta y respuesta son obligatorias');
+            return;
         }
-    });
+        
+        const newCard = {
+            id: Date.now().toString(),
+            question,
+            answer,
+            questionImg: cardQuestionImgInput.value || null,
+            answerImg: cardAnswerImgInput.value || null,
+            createdAt: new Date().toISOString(),
+            reviewCount: 0,
+            interval: 1,
+            easeFactor: 2.5,
+            nextReviewDate: Timestamp.now()
+        };
+        
+        if (!deck.cards) deck.cards = [];
+        deck.cards.push(newCard);
+        
+        // Limpiar formulario
+        cardQuestionInput.value = '';
+        cardAnswerInput.value = '';
+        cardQuestionImgInput.value = '';
+        cardAnswerImgInput.value = '';
+        
+        renderManageDeckView(deck);
+        saveStateToFirestore();
+        showNotification('Carta agregada');
+    }
 
-    cardList.addEventListener('click', (e) => {
-        const deleteBtn = e.target.closest('.delete-card-btn');
-        if (deleteBtn) {
-            const cardId = deleteBtn.dataset.cardId;
-            const deck = state.decks.find(d => d.id === state.currentDeckId);
-            if (deck) {
-                deck.cards = deck.cards.filter(c => c.id !== cardId);
-                renderManageView();
-                saveStateToFirestore();
-            }
+    function deleteCard(deckId, cardIndex) {
+        const deck = state.decks.find(d => d.id === deckId);
+        if (!deck || !deck.cards) return;
+        
+        if (confirm('¿Estás seguro de eliminar esta carta?')) {
+            deck.cards.splice(cardIndex, 1);
+            renderManageDeckView(deck);
+            saveStateToFirestore();
+            showNotification('Carta eliminada');
         }
-    });
-    
-    deleteDeckBtn.addEventListener('click', () => {
-        if (confirm("¿Estás seguro de que quieres eliminar este tema y todas sus tarjetas? Esta acción no se puede deshacer.")) {
+    }
+
+    function deleteDeck() {
+        const deck = state.decks.find(d => d.id === state.currentDeckId);
+        if (!deck) return;
+        
+        if (confirm(`¿Estás seguro de eliminar el tema "${deck.name}" y todas sus cartas?`)) {
             state.decks = state.decks.filter(d => d.id !== state.currentDeckId);
             navigate(VIEWS.DASHBOARD);
             saveStateToFirestore();
+            showNotification('Tema eliminado');
         }
-    });
-
-
-    // --- Lógica de Sesión de Estudio (Study) ---
-
-    function startStudySession() {
-        const deck = state.decks.find(d => d.id === state.currentDeckId);
-        if (!deck) return;
-
-        const today = getTodayString();
-        const cardsToReview = deck.cards
-            .filter(c => c.nextReviewDate <= today)
-            .sort(() => Math.random() - 0.5);
-
-        state.studySession = {
-            cardsToReview: cardsToReview,
-            currentCardIndex: 0,
-            correctAnswers: 0,
-        };
-        
-        logStudyActivity();
     }
+
+    // Event listeners para gestión de decks
+    newDeckBtn?.addEventListener('click', createNewDeck);
+    saveCardBtn?.addEventListener('click', addCard);
+    deleteDeckBtn?.addEventListener('click', deleteDeck);
+
+    // --- Sesión de Estudio ---
     
-    function renderStudyView() {
-        const { cardsToReview, currentCardIndex } = state.studySession;
-        const deck = state.decks.find(d => d.id === state.currentDeckId);
+    function startStudySession(deckId) {
+        const deck = state.decks.find(d => d.id === deckId);
+        if (!deck || !deck.cards) return;
         
-        if (!deck) {
-            navigate(VIEWS.DASHBOARD);
+        const cardsToReview = deck.cards.filter(isCardDueForReview);
+        
+        if (cardsToReview.length === 0) {
+            showNotification('No hay cartas para revisar en este tema');
             return;
         }
-
+        
+        // Mezclar cartas
+        for (let i = cardsToReview.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [cardsToReview[i], cardsToReview[j]] = [cardsToReview[j], cardsToReview[i]];
+        }
+        
+        state.studySession = {
+            deckId,
+            cardsToReview,
+            currentCardIndex: 0,
+            correctAnswers: 0
+        };
+        
         studyDeckTitle.textContent = deck.name;
+        renderStudyView();
+        navigate(VIEWS.STUDY);
+    }
+
+    function renderStudyView() {
+        const { cardsToReview, currentCardIndex } = state.studySession;
         
         if (currentCardIndex >= cardsToReview.length) {
-            studyProgress.textContent = `Progreso: ${cardsToReview.length} / ${cardsToReview.length}`;
+            // Sesión completada
+            const accuracy = Math.round((state.studySession.correctAnswers / cardsToReview.length) * 100);
+            const bonusPoints = accuracy >= 80 ? 20 : accuracy >= 60 ? 10 : 5;
+            
+            state.points += bonusPoints;
+            logStudyActivity();
+            
             studyCard.innerHTML = `
-                <div class="text-center p-8">
-                    <h3 class="text-2xl font-bold text-white mb-4">¡Sesión completada!</h3>
-                    <p class="text-lg text-slate-300 mb-6">Repasaste ${cardsToReview.length} tarjetas.</p>
-                    <button id="finish-study-session-btn" class="bg-teal-600 hover:bg-teal-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors">
+                <div class="text-center py-8">
+                    <div class="text-6xl mb-4">🎉</div>
+                    <h2 class="text-2xl font-bold text-slate-200 mb-4">¡Sesión Completada!</h2>
+                    <div class="space-y-2 text-slate-300">
+                        <p>Cartas revisadas: ${cardsToReview.length}</p>
+                        <p>Precisión: ${accuracy}%</p>
+                        <p class="text-teal-400">+${bonusPoints} puntos bonus</p>
+                    </div>
+                    <button id="finish-study-btn" class="mt-6 bg-teal-600 hover:bg-teal-500 text-white px-6 py-3 rounded-lg transition-colors">
                         Volver al Dashboard
                     </button>
                 </div>
             `;
-            document.getElementById('finish-study-session-btn').addEventListener('click', () => {
+            
+            document.getElementById('finish-study-btn').addEventListener('click', () => {
                 navigate(VIEWS.DASHBOARD);
                 saveStateToFirestore();
             });
             return;
         }
-        
-        studyProgress.textContent = `Progreso: ${currentCardIndex} / ${cardsToReview.length}`;
-        const currentCard = cardsToReview[currentCardIndex];
-        
-        studyQuestionImg.src = currentCard.questionImg || '';
-        studyQuestionImg.classList.toggle('hidden', !currentCard.questionImg);
-        studyQuestionTextEl.textContent = currentCard.question;
-        
-        studyAnswerImg.src = '';
-        studyAnswerImg.classList.add('hidden');
-        
-        // --- ¡LA CORRECCIÓN ESTÁ AQUÍ! ---
-        // (Asegurándonos de que la respuesta correcta se carga en el elemento de respuesta)
-        studyAnswerTextEl.textContent = currentCard.answer;
-        // --- --- ---
-        
-        studyAnswerImg.onerror = () => { studyAnswerImg.classList.add('hidden'); };
-        studyQuestionImg.onerror = () => { studyQuestionImg.classList.add('hidden'); };
 
-        studyAnswerTextEl.parentElement.classList.add('hidden');
-        studyDifficultyBtns.classList.add('hidden');
+        const currentCard = cardsToReview[currentCardIndex];
+        studyProgress.textContent = `Carta ${currentCardIndex + 1} de ${cardsToReview.length}`;
         
+        // Mostrar pregunta
+        studyQuestionTextEl.textContent = currentCard.question;
+        if (currentCard.questionImg) {
+            studyQuestionImg.src = currentCard.questionImg;
+            studyQuestionImg.classList.remove('hidden');
+        } else {
+            studyQuestionImg.classList.add('hidden');
+        }
+        
+        // Ocultar respuesta inicialmente
+        studyAnswerTextEl.textContent = currentCard.answer;
+        if (currentCard.answerImg) {
+            studyAnswerImg.src = currentCard.answerImg;
+            studyAnswerImg.classList.remove('hidden');
+        } else {
+            studyAnswerImg.classList.add('hidden');
+        }
+        
+        // Configurar botones
+        document.getElementById('study-answer').classList.add('hidden');
         showAnswerBtn.classList.remove('hidden');
-        studyCard.classList.remove('hidden');
+        studyDifficultyBtns.classList.add('hidden');
     }
 
-    showAnswerBtn.addEventListener('click', () => {
-        const { cardsToReview, currentCardIndex } = state.studySession;
-        const currentCard = cardsToReview[currentCardIndex];
-        
-        studyAnswerImg.src = currentCard.answerImg || '';
-        studyAnswerImg.classList.toggle('hidden', !currentCard.answerImg);
-        studyAnswerTextEl.parentElement.classList.remove('hidden');
-        
+    function showStudyAnswer() {
+        document.getElementById('study-answer').classList.remove('hidden');
         showAnswerBtn.classList.add('hidden');
         studyDifficultyBtns.classList.remove('hidden');
-    });
+    }
 
-    studyDifficultyBtns.addEventListener('click', (e) => {
-        const difficulty = e.target.closest('button')?.dataset.difficulty;
-        if (!difficulty) return;
-
-        const { cardsToReview, currentCardIndex } = state.studySession;
-        const card = cardsToReview[currentCardIndex];
-
-        let { interval, easeFactor } = card;
-        interval = interval || 0;
-        easeFactor = easeFactor || 2.5;
-
-        let nextInterval;
-        let newEaseFactor = easeFactor;
-
-        if (difficulty === 'easy') {
-            nextInterval = getNextInterval(interval, 'easy');
-            newEaseFactor += 0.1;
-            state.points += 3;
-        } else if (difficulty === 'good') {
-            nextInterval = getNextInterval(interval, 'good');
-            state.points += 2;
-        } else {
-            nextInterval = 0;
-            newEaseFactor = Math.max(1.3, easeFactor - 0.2);
-            state.points += 1;
-        }
+    function answerCard(difficulty) {
+        const { cardsToReview, currentCardIndex, deckId } = state.studySession;
+        const currentCard = cardsToReview[currentCardIndex];
+        const deck = state.decks.find(d => d.id === deckId);
+        const cardInDeck = deck.cards.find(c => c.id === currentCard.id);
         
-        const nextReviewDate = new Date(getTodayString() + 'T00:00:00');
-        nextReviewDate.setDate(nextReviewDate.getDate() + nextInterval);
-        
-        const deck = state.decks.find(d => d.id === state.currentDeckId);
-        const cardInDeck = deck.cards.find(c => c.id === card.id);
         if (cardInDeck) {
-            cardInDeck.interval = nextInterval;
-            cardInDeck.easeFactor = newEaseFactor;
-            cardInDeck.nextReviewDate = nextReviewDate.toISOString().split('T')[0];
+            updateCardReviewDate(cardInDeck, difficulty);
         }
-
+        
+        // Puntos por dificultad
+        const points = { again: 1, hard: 3, good: 5, easy: 8 };
+        state.points += points[difficulty] || 0;
+        
+        if (difficulty === 'good' || difficulty === 'easy') {
+            state.studySession.correctAnswers++;
+        }
+        
+        // Siguiente carta
         state.studySession.currentCardIndex++;
         renderStudyView();
-    });
-    
-    function getNextInterval(lastInterval, difficulty) {
-        if (difficulty === 'hard') return 1;
-        if (lastInterval === 0) {
-             return (difficulty === 'easy') ? 4 : 1;
-        }
-        if (lastInterval === 1) {
-            return (difficulty === 'easy') ? 7 : 3;
-        }
-        let next = lastInterval * 2;
-        if (difficulty === 'easy') next += 1;
-        return Math.min(next, 60);
     }
-    
 
-    // --- Lógica de Quiz ---
+    // Event listeners para estudio
+    showAnswerBtn?.addEventListener('click', showStudyAnswer);
+    
+    document.getElementById('answer-again')?.addEventListener('click', () => answerCard('again'));
+    document.getElementById('answer-hard')?.addEventListener('click', () => answerCard('hard'));
+    document.getElementById('answer-good')?.addEventListener('click', () => answerCard('good'));
+    document.getElementById('answer-easy')?.addEventListener('click', () => answerCard('easy'));
+
+    // --- Quiz ---
     
     let quizState = {
+        deckId: null,
         questions: [],
         currentQuestionIndex: 0,
         score: 0,
         answered: false
     };
 
-    function startQuiz() {
-        const deck = state.decks.find(d => d.id === state.currentDeckId);
-        if (!deck || deck.cards.length < 4) return;
-
-        logStudyActivity();
-
-        const shuffledCards = [...deck.cards].sort(() => Math.random() - 0.5);
-        const selectedCards = shuffledCards;
-
-        quizState.questions = selectedCards.map(card => {
-            return generateQuizQuestion(card, deck.cards);
-        });
-        
-        quizState.currentQuestionIndex = 0;
-        quizState.score = 0;
-        quizState.answered = false;
-
-        renderQuizView();
-    }
-
-    function generateQuizQuestion(correctCard, allCards) {
-        let options = [correctCard.answer];
-        
-        const incorrectCards = allCards.filter(c => c.id !== correctCard.id);
-        const shuffledIncorrect = incorrectCards.sort(() => Math.random() - 0.5);
-        
-        for (let i = 0; i < 3 && i < shuffledIncorrect.length; i++) {
-            options.push(shuffledIncorrect[i].answer);
-        }
-
-        options.sort(() => Math.random() - 0.5);
-
-        return {
-            question: correctCard.question,
-            options: options,
-            correctAnswer: correctCard.answer
-        };
-    }
-    
-    function renderQuizView() {
-        const deck = state.decks.find(d => d.id === state.currentDeckId);
-        if (!deck) {
-            navigate(VIEWS.DASHBOARD);
+    function startQuiz(deckId) {
+        const deck = state.decks.find(d => d.id === deckId);
+        if (!deck || !deck.cards || deck.cards.length < 4) {
+            showNotification('Necesitas al menos 4 cartas para hacer un quiz');
             return;
         }
+        
+        const questions = generateQuizQuestions(deck.cards);
+        if (questions.length === 0) {
+            showNotification('No se pudieron generar preguntas para el quiz');
+            return;
+        }
+        
+        quizState = {
+            deckId,
+            questions,
+            currentQuestionIndex: 0,
+            score: 0,
+            answered: false
+        };
+        
+        quizDeckTitle.textContent = deck.name;
+        renderQuizView();
+        navigate(VIEWS.QUIZ);
+    }
 
-        quizDeckTitle.textContent = `Quiz: ${deck.name}`;
+    function generateQuizQuestions(cards, numQuestions = 10) {
+        const shuffledCards = [...cards].sort(() => 0.5 - Math.random());
+        const questions = [];
+        
+        for (let i = 0; i < Math.min(numQuestions, shuffledCards.length); i++) {
+            const correctCard = shuffledCards[i];
+            const otherCards = shuffledCards.filter(c => c.id !== correctCard.id);
+            
+            if (otherCards.length < 3) break;
+            
+            const wrongOptions = otherCards
+                .sort(() => 0.5 - Math.random())
+                .slice(0, 3)
+                .map(c => c.answer);
+            
+            const allOptions = [correctCard.answer, ...wrongOptions]
+                .sort(() => 0.5 - Math.random());
+            
+            questions.push({
+                question: correctCard.question,
+                options: allOptions,
+                correctAnswer: correctCard.answer
+            });
+        }
+        
+        return questions;
+    }
+
+    function renderQuizView() {
+        const { questions, currentQuestionIndex } = quizState;
+        
         quizFeedback.classList.add('hidden');
-        quizFeedback.textContent = '';
         nextQuizQuestionBtn.classList.add('hidden');
         
-        const { questions, currentQuestionIndex } = quizState;
-
         if (currentQuestionIndex >= questions.length) {
-            const scorePercent = (quizState.score / questions.length) * 100;
-            quizQuestionText.textContent = '¡Quiz completado!';
-            quizOptionsList.innerHTML = `
-                <p class="text-xl text-center text-slate-300">
-                    Tu puntuación: ${quizState.score} / ${questions.length} (${Math.round(scorePercent)}%)
-                </p>
-                <button id="finish-quiz-btn" class="w-full mt-6 bg-teal-600 hover:bg-teal-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors">
-                    Volver al Dashboard
-                </button>
+            // Quiz completado
+            const accuracy = Math.round((quizState.score / questions.length) * 100);
+            const bonusPoints = quizState.score * 5;
+            state.points += bonusPoints;
+            
+            document.getElementById('quiz-content').innerHTML = `
+                <div class="text-center py-8">
+                    <div class="text-6xl mb-4">🏆</div>
+                    <h2 class="text-2xl font-bold text-slate-200 mb-4">¡Quiz Completado!</h2>
+                    <div class="space-y-2 text-slate-300">
+                        <p>Puntuación: ${quizState.score}/${questions.length}</p>
+                        <p>Precisión: ${accuracy}%</p>
+                        <p class="text-teal-400">+${bonusPoints} puntos</p>
+                    </div>
+                    <button id="finish-quiz-btn" class="mt-6 bg-teal-600 hover:bg-teal-500 text-white px-6 py-3 rounded-lg transition-colors">
+                        Volver al Dashboard
+                    </button>
+                </div>
             `;
+            
             document.getElementById('finish-quiz-btn').addEventListener('click', () => {
                 navigate(VIEWS.DASHBOARD);
                 saveStateToFirestore();
@@ -1123,5 +1125,168 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error("Error al reproducir sonido:", e);
         }
     }
-});
 
+    // --- FUNCIONES DE AUTENTICACIÓN ---
+
+    // Detectar cambios en el estado de autenticación
+    onAuthStateChanged(auth, (user) => {
+        if (user) {
+            // Usuario logueado
+            console.log("Usuario autenticado:", user.email);
+            currentUserId = user.uid;
+            
+            // Mostrar contenido principal y ocultar login
+            showMainApp();
+            
+            // Cargar datos del usuario desde Firestore
+            loadUserDataFromFirestore();
+            
+            // Actualizar UI con info del usuario
+            if (userProfilePic && user.photoURL) {
+                userProfilePic.src = user.photoURL;
+                userProfilePic.classList.remove('hidden');
+            }
+            
+        } else {
+            // Usuario no logueado
+            console.log("Usuario no autenticado");
+            currentUserId = null;
+            
+            // Mostrar pantalla de login y ocultar contenido
+            showLoginScreen();
+            
+            // Limpiar datos locales
+            if (unsubscribeFromFirestore) {
+                unsubscribeFromFirestore();
+            }
+            state = { ...defaultState };
+        }
+    });
+
+    // Función para mostrar la aplicación principal
+    function showMainApp() {
+        if (loginView) {
+            loginView.classList.add('hidden');
+        }
+        if (authContainer) {
+            authContainer.classList.add('hidden');
+        }
+        if (mainContent) {
+            mainContent.classList.remove('hidden');
+        }
+    }
+
+    // Función para mostrar la pantalla de login
+    function showLoginScreen() {
+        if (mainContent) {
+            mainContent.classList.add('hidden');
+        }
+        if (authContainer) {
+            authContainer.classList.remove('hidden');
+        }
+        if (loginView) {
+            loginView.classList.remove('hidden');
+        }
+    }
+
+    // Función para login con Google
+    async function loginWithGoogle() {
+        try {
+            const provider = new GoogleAuthProvider();
+            const result = await signInWithPopup(auth, provider);
+            console.log("Login exitoso:", result.user.email);
+            showNotification(`¡Bienvenido, ${result.user.displayName}!`);
+        } catch (error) {
+            console.error("Error en login:", error);
+            let errorMessage = "Error al iniciar sesión. ";
+            
+            if (error.code === 'auth/popup-blocked') {
+                errorMessage += "El popup fue bloqueado. Permite popups para este sitio.";
+            } else if (error.code === 'auth/popup-closed-by-user') {
+                errorMessage += "Login cancelado.";
+            } else {
+                errorMessage += "Inténtalo de nuevo.";
+            }
+            
+            showNotification(errorMessage);
+        }
+    }
+
+    // Función para logout
+    async function logout() {
+        try {
+            await signOut(auth);
+            showNotification("Sesión cerrada correctamente");
+        } catch (error) {
+            console.error("Error en logout:", error);
+            showNotification("Error al cerrar sesión");
+        }
+    }
+
+    // Event Listeners para los botones de autenticación
+    if (loginBtn) {
+        loginBtn.addEventListener('click', loginWithGoogle);
+    }
+
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', logout);
+    }
+
+    // Función para cargar datos del usuario desde Firestore
+    function loadUserDataFromFirestore() {
+        if (!currentUserId) return;
+        
+        const userDocRef = doc(db, "users", currentUserId);
+        
+        // Escuchar cambios en tiempo real
+        unsubscribeFromFirestore = onSnapshot(userDocRef, (docSnapshot) => {
+            if (docSnapshot.exists()) {
+                const userData = docSnapshot.data();
+                console.log("Datos cargados desde Firestore:", userData);
+                
+                // Actualizar estado local con datos de Firestore
+                state = { ...defaultState, ...userData };
+                
+                // Restaurar temporizador del pomodoro si es necesario
+                if (state.pomodoro) {
+                    if (state.pomodoro.timer) {
+                        delete state.pomodoro.timer;
+                    }
+                    if (state.pomodoro.endTime && state.pomodoro.isRunning) {
+                        checkRunningPomodoro();
+                    }
+                }
+                
+                // Actualizar todas las vistas
+                updateUI();
+                
+            } else {
+                console.log("No hay datos previos, usando estado por defecto");
+                // Guardar estado inicial
+                saveStateToFirestore();
+            }
+        }, (error) => {
+            console.error("Error cargando datos de Firestore:", error);
+        });
+    }
+
+    // Función para actualizar toda la UI
+    function updateUI() {
+        // Actualizar puntos
+        if (pointsEl) {
+            pointsEl.textContent = state.points || 0;
+        }
+        
+        // Actualizar pomodoro
+        updatePomodoroUI();
+        
+        // Actualizar lista de decks
+        renderDashboard();
+        
+        // Actualizar tareas
+        renderTasks();
+        
+        // Actualizar estadísticas
+        updateStats();
+    }
+});
