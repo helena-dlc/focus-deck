@@ -195,8 +195,16 @@
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                         <textarea id="new-card-question" placeholder="Pregunta o concepto" rows="3" class="w-full bg-dark-bg border border-dark-border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-primary"></textarea>
                         <textarea id="new-card-answer" placeholder="Respuesta" rows="3" class="w-full bg-dark-bg border border-dark-border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-primary"></textarea>
-                        <input type="text" id="new-card-question-img" placeholder="URL de imagen para pregunta (Opcional)" class="w-full bg-dark-bg border border-dark-border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-primary">
-                        <input type="text" id="new-card-answer-img" placeholder="URL de imagen para respuesta (Opcional)" class="w-full bg-dark-bg border border-dark-border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-primary">
+                        <div>
+                            <label class="block text-sm text-slate-400 mb-2">Imagen para pregunta (Opcional)</label>
+                            <input type="file" id="new-card-question-img" accept="image/*" class="w-full bg-dark-bg border border-dark-border rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-primary text-slate-300 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-dark-bg hover:file:bg-primary-dark">
+                            <img id="preview-question-img" class="mt-2 max-h-32 rounded-lg hidden" alt="Vista previa">
+                        </div>
+                        <div>
+                            <label class="block text-sm text-slate-400 mb-2">Imagen para respuesta (Opcional)</label>
+                            <input type="file" id="new-card-answer-img" accept="image/*" class="w-full bg-dark-bg border border-dark-border rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-primary text-slate-300 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-dark-bg hover:file:bg-primary-dark">
+                            <img id="preview-answer-img" class="mt-2 max-h-32 rounded-lg hidden" alt="Vista previa">
+                        </div>
                     </div>
                     <button id="add-card-to-deck-btn" class="w-full bg-primary hover:bg-primary-dark text-dark-bg font-bold py-2 px-4 rounded-full">Añadir Tarjeta</button>
                 </div>

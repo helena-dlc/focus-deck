@@ -152,6 +152,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeApplication();
 });
 
+<<<<<<< HEAD
 function initializeApplication() {
     loginBtn?.addEventListener('click', signInWithGoogle);
     addDeckBtn?.addEventListener('click', () => {
@@ -179,6 +180,289 @@ function initializeApplication() {
         confirmModal.classList.add('hidden');
         confirmModal.classList.remove('flex');
         confirmCallback = null;
+=======
+    const VIEWS = {
+        DASHBOARD: 'dashboard-view',
+        STUDY: 'study-view',
+        MANAGE: 'manage-deck-view',
+        QUIZ: 'quiz-view',
+    };
+
+    // --- Elementos del DOM ---
+    // (Asegúrate que TODOS estos IDs existen en tu index.html)
+    const views = document.querySelectorAll('.view');
+    const dashboardView = document.getElementById('dashboard-view');
+    const studyView = document.getElementById('study-view');
+    const manageDeckView = document.getElementById('manage-deck-view');
+    const quizView = document.getElementById('quiz-view');
+    const authContainer = document.getElementById('auth-container');
+    const loginView = document.getElementById('login-view');
+    const mainContent = document.getElementById('main-content');
+    const loginBtn = document.getElementById('login-btn');
+    // Header elements will be looked up dynamically after login
+    const pomodoroTimerEl = document.getElementById('pomodoro-timer');
+    const startPomodoroBtn = document.getElementById('start-pomodoro-btn');
+    const resetPomodoroBtn = document.getElementById('reset-pomodoro-btn');
+    const taskInput = document.getElementById('task-input');
+    const taskPriority = document.getElementById('task-priority');
+    const addTaskBtn = document.getElementById('add-task-btn');
+    const taskList = document.getElementById('task-list');
+    // Points element is inside authContainer, looked up dynamically
+    const newDeckBtn = document.getElementById('new-deck-btn');
+    const deckList = document.getElementById('deck-list');
+    const noDecksMessage = document.getElementById('no-decks-message');
+    const streakEl = document.getElementById('streak-days');
+    const studyTimeEl = document.getElementById('study-time');
+    const totalDomainEl = document.getElementById('total-domain');
+    const domainByDeckList = document.getElementById('domain-by-deck-list');
+    const manageDeckTitle = document.getElementById('manage-deck-title');
+    const cardList = document.getElementById('card-list');
+    const addCardBtn = document.getElementById('add-card-to-deck-btn');
+    const cardQuestionInput = document.getElementById('new-card-question');
+    const cardAnswerInput = document.getElementById('new-card-answer');
+    const cardQuestionImgInput = document.getElementById('new-card-question-img');
+    const cardAnswerImgInput = document.getElementById('new-card-answer-img');
+    const previewQuestionImg = document.getElementById('preview-question-img');
+    const previewAnswerImg = document.getElementById('preview-answer-img');
+    const deleteDeckBtn = document.getElementById('delete-deck-btn');
+    const studyDeckTitle = document.getElementById('study-deck-title');
+    const studyProgress = document.getElementById('study-progress');
+    const studyCard = document.getElementById('study-card');
+    const studyQuestionImg = document.getElementById('study-question-img');
+    const studyQuestionTextEl = document.getElementById('study-question-text');
+    const studyAnswerImg = document.getElementById('study-answer-img');
+    const studyAnswerTextEl = document.getElementById('study-answer-text');
+    const showAnswerBtn = document.getElementById('show-answer-btn');
+    const studyDifficultyBtns = document.getElementById('study-difficulty-btns');
+    const quizDeckTitle = document.getElementById('quiz-deck-title');
+    const quizProgress = document.getElementById('quiz-progress');
+    const quizQuestionText = document.getElementById('quiz-question-text');
+    const quizOptionsList = document.getElementById('quiz-options');
+    const quizFeedback = document.getElementById('quiz-feedback');
+    const nextQuizQuestionBtn = document.getElementById('next-quiz-question-btn');
+    const notification = document.getElementById('notification');
+
+    // --- Navegación ---
+    document.getElementById('back-to-dashboard-study')?.addEventListener('click', () => navigate(VIEWS.DASHBOARD));
+    document.getElementById('back-to-dashboard-manage')?.addEventListener('click', () => navigate(VIEWS.DASHBOARD));
+    document.getElementById('back-to-dashboard-quiz')?.addEventListener('click', () => navigate(VIEWS.DASHBOARD));
+
+    // --- Listeners para vista previa de imágenes ---
+    if (cardQuestionImgInput && previewQuestionImg) {
+        cardQuestionImgInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    previewQuestionImg.src = event.target.result;
+                    previewQuestionImg.classList.remove('hidden');
+                };
+                reader.readAsDataURL(file);
+            } else {
+                previewQuestionImg.classList.add('hidden');
+            }
+        });
+    }
+
+    if (cardAnswerImgInput && previewAnswerImg) {
+        cardAnswerImgInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    previewAnswerImg.src = event.target.result;
+                    previewAnswerImg.classList.remove('hidden');
+                };
+                reader.readAsDataURL(file);
+            } else {
+                previewAnswerImg.classList.add('hidden');
+            }
+        });
+    }
+
+
+    // --- State Management & Persistence ---
+
+    async function saveStateToFirestore() {
+        if (!currentUserId) return;
+        console.log("Guardando estado para:", currentUserId, state); // Log estado antes de guardar
+        try {
+            // Crear copia profunda para evitar modificar el estado original durante el guardado
+            const stateToSave = JSON.parse(JSON.stringify(state));
+
+            delete stateToSave.pomodoro?.timer;
+            stateToSave.studySession = defaultState.studySession;
+
+            // Asegurar que decks, tasks y studyLog son arrays
+             stateToSave.decks = Array.isArray(stateToSave.decks) ? stateToSave.decks : [];
+             stateToSave.tasks = Array.isArray(stateToSave.tasks) ? stateToSave.tasks : [];
+             stateToSave.studyLog = Array.isArray(stateToSave.studyLog) ? stateToSave.studyLog : [];
+
+
+            // Convertir fechas string a Timestamps ANTES de guardar
+            stateToSave.decks = stateToSave.decks.map(deck => ({
+                ...deck,
+                cards: (Array.isArray(deck.cards) ? deck.cards : []).map(card => {
+                    let nextReviewDateTS = card.nextReviewDate;
+                    if (nextReviewDateTS && typeof nextReviewDateTS === 'string') {
+                        try {
+                            // Intentar parsear como YYYY-MM-DD y convertir a Timestamp UTC
+                            const date = new Date(nextReviewDateTS + 'T00:00:00Z');
+                            if (!isNaN(date.getTime())) {
+                                nextReviewDateTS = Timestamp.fromDate(date);
+                            } else {
+                                console.warn("Fecha inválida al guardar:", nextReviewDateTS);
+                                nextReviewDateTS = Timestamp.now();
+                            }
+                        } catch (e) {
+                            console.error("Error convirtiendo fecha string a Timestamp:", nextReviewDateTS, e);
+                            nextReviewDateTS = Timestamp.now();
+                        }
+                    } else if (!(nextReviewDateTS instanceof Timestamp)) {
+                        // Si no es string ni Timestamp válido, poner ahora
+                        nextReviewDateTS = Timestamp.now();
+                    }
+                    return { ...card, nextReviewDate: nextReviewDateTS };
+                })
+            }));
+
+
+            const userDocRef = doc(db, "users", currentUserId);
+            // Usar setDoc SIN merge para asegurar que se guarde todo el estado limpio
+            await setDoc(userDocRef, stateToSave);
+            console.log("Estado guardado correctamente en Firestore.");
+        } catch (error) {
+            console.error("Error guardando estado en Firestore: ", error);
+            showNotification("Error al guardar tu progreso.");
+        }
+    }
+
+    // Función para procesar datos cargados de Firestore
+    function processLoadedData(data) {
+        console.log("Procesando datos cargados:", data);
+        const loadedState = { ...defaultState, ...data }; // Combinar con default para asegurar estructura
+
+        // Limpiar/Resetear partes volátiles
+        loadedState.pomodoro = { ...defaultState.pomodoro, ...(loadedState.pomodoro || {}) };
+        loadedState.pomodoro.isRunning = false; // Timer siempre se detiene al cargar
+        loadedState.pomodoro.timer = null;
+        loadedState.studySession = defaultState.studySession; // Nunca restaurar sesión de estudio
+
+        // Asegurar que arrays son arrays y convertir Timestamps
+        loadedState.decks = Array.isArray(loadedState.decks) ? loadedState.decks : [];
+        loadedState.tasks = Array.isArray(loadedState.tasks) ? loadedState.tasks : [];
+        loadedState.studyLog = Array.isArray(loadedState.studyLog) ? loadedState.studyLog : [];
+
+        loadedState.decks = loadedState.decks.map(deck => ({
+            ...deck,
+            cards: (Array.isArray(deck.cards) ? deck.cards : []).map(card => {
+                let nextReviewDateStr = card.nextReviewDate;
+                if (nextReviewDateStr && nextReviewDateStr.toDate) { // Convertir Timestamp a YYYY-MM-DD
+                    try {
+                        nextReviewDateStr = nextReviewDateStr.toDate().toISOString().split('T')[0];
+                    } catch (e) { nextReviewDateStr = getTodayString(); }
+                } else if (typeof nextReviewDateStr !== 'string' || isNaN(new Date(nextReviewDateStr + 'T00:00:00Z').getTime())) {
+                    nextReviewDateStr = getTodayString(); // Fallback
+                }
+                const questionImg = card.questionImg || null;
+                const answerImg = card.answerImg || null;
+                return { ...card, nextReviewDate: nextReviewDateStr, questionImg, answerImg };
+            })
+        }));
+        console.log("Estado procesado final:", loadedState);
+        return loadedState;
+    }
+
+
+    // Listener de Firestore (onSnapshot) - Modificado para usar processLoadedData
+    function listenToUserData(userId) {
+        if (unsubscribeFromFirestore) unsubscribeFromFirestore();
+
+        const userDocRef = doc(db, "users", userId);
+        console.log("Estableciendo listener onSnapshot para usuario:", userId);
+
+        unsubscribeFromFirestore = onSnapshot(userDocRef, (docSnap) => {
+            console.log("Recibido snapshot de Firestore. Existe:", docSnap.exists());
+            if (docSnap.exists()) {
+                state = processLoadedData(docSnap.data());
+            } else {
+                // Documento no existe (podría ser usuario nuevo o datos borrados)
+                console.log("Documento no existe en Firestore para el usuario. Usando estado por defecto.");
+                state = { ...defaultState };
+                 // No guardar aquí automáticamente, esperar a la primera acción del usuario
+                 // saveStateToFirestore(); // Evitar posible bucle si hay problemas
+            }
+            render(); // Renderizar UI con el estado actualizado
+            checkRunningPomodoro();
+        }, (error) => {
+            console.error("Error en listener onSnapshot: ", error);
+            showNotification("Error al sincronizar datos. Intenta recargar.");
+            // Resetear estado local si falla la escucha? Podría ser drástico.
+            // state = { ...defaultState };
+            // render();
+        });
+    }
+
+
+    async function logStudyActivity() {
+        const today = getTodayString();
+        if (!Array.isArray(state.studyLog)) state.studyLog = [];
+        if (!state.studyLog.includes(today)) {
+            console.log("Registrando actividad de estudio para racha.");
+            state.studyLog.push(today); // Actualizar estado local
+
+            if (currentUserId) {
+                try {
+                    const userDocRef = doc(db, "users", currentUserId);
+                    await updateDoc(userDocRef, { studyLog: arrayUnion(today) });
+                    console.log("StudyLog actualizado en Firestore.");
+                } catch(e) {
+                    console.error("Error actualizando studyLog con arrayUnion: ", e);
+                    await saveStateToFirestore(); // Guardar todo el estado como fallback
+                }
+            }
+            renderStats(); // Actualizar UI
+        }
+    }
+
+
+    // --- Lógica de Autenticación (Versión Limpia) ---
+    onAuthStateChanged(auth, (user) => {
+        console.log("Auth state changed. User:", user ? user.uid : 'null');
+        if (user) {
+            // Usuario está logueado
+            currentUserId = user.uid;
+
+            // Mostrar app, ocultar login
+            if (loginView) loginView.classList.add('hidden');
+            if (mainContent) mainContent.classList.remove('hidden');
+
+            // Actualizar header dinámicamente
+            updateAuthUI(user);
+
+            // Cargar datos del usuario
+            listenToUserData(currentUserId);
+
+        } else {
+            // Usuario está deslogueado
+            currentUserId = null;
+
+            // Mostrar login, ocultar app
+            if (loginView) loginView.classList.remove('hidden');
+            if (mainContent) mainContent.classList.add('hidden');
+
+            // Limpiar header
+            updateAuthUI(null);
+
+            // Detener escucha de datos y resetear estado
+            if (unsubscribeFromFirestore) {
+                unsubscribeFromFirestore();
+                unsubscribeFromFirestore = null;
+            }
+            state = { ...defaultState };
+            render(); // Renderizar UI vacía (oculta)
+        }
+>>>>>>> fec937e (cambios en pomodoro y flashcards)
     });
 
     addTaskBtn?.addEventListener('click', addTask);
@@ -1082,6 +1366,7 @@ function handleQuizAnswer(optionIndex) {
     });
 }
 
+
 function showQuizResults() {
     quizContainer.classList.add('hidden');
     quizResults.classList.remove('hidden');
@@ -1111,6 +1396,69 @@ function renderStats() {
             totalCards++;
             if (card.interval >= 21) {
                 masteredCards++;
+
+      // Listener añadir tarjeta (revisado)
+     if (addCardBtn) {
+        addCardBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            if (!Array.isArray(state.decks)) state.decks = [];
+            const deck = state.decks.find(d => d.id === state.currentDeckId);
+            if (deck) {
+                 if (!Array.isArray(deck.cards)) deck.cards = [];
+                 const question = cardQuestionInput?.value.trim();
+                 const answer = cardAnswerInput?.value.trim();
+                 if (!question || !answer) {
+                     showNotification("La pregunta y la respuesta son obligatorias.");
+                     return;
+                 }
+
+                // Convertir imágenes a Base64 si se seleccionaron
+                let questionImgData = null;
+                let answerImgData = null;
+
+                if (cardQuestionImgInput?.files && cardQuestionImgInput.files[0]) {
+                    questionImgData = await fileToBase64(cardQuestionImgInput.files[0]);
+                }
+
+                if (cardAnswerImgInput?.files && cardAnswerImgInput.files[0]) {
+                    answerImgData = await fileToBase64(cardAnswerImgInput.files[0]);
+                }
+
+                const newCard = {
+                    id: 'card_' + Date.now(),
+                    question: question,
+                    answer: answer,
+                    questionImg: questionImgData,
+                    answerImg: answerImgData,
+                    interval: 0,
+                    easeFactor: 2.5,
+                    nextReviewDate: getTodayString() // String YYYY-MM-DD
+                };
+                deck.cards.push(newCard);
+                renderManageView();
+                saveStateToFirestore();
+                
+                // Limpiar el formulario completamente
+                cardQuestionInput.value = '';
+                cardAnswerInput.value = '';
+                cardQuestionImgInput.value = '';
+                cardAnswerImgInput.value = '';
+                
+                // Ocultar vistas previas
+                if (previewQuestionImg) {
+                    previewQuestionImg.classList.add('hidden');
+                    previewQuestionImg.src = '';
+                }
+                if (previewAnswerImg) {
+                    previewAnswerImg.classList.add('hidden');
+                    previewAnswerImg.src = '';
+                }
+                
+                showNotification("Tarjeta añadida exitosamente");
+                console.log("Nueva tarjeta añadida:", newCard);
+            } else {
+                 console.error("No se encontró el deck actual para añadir tarjeta.");
+>>>>>>> fec937e (cambios en pomodoro y flashcards)
             }
         });
     });
@@ -1139,7 +1487,386 @@ function renderStats() {
                         </div>
                     </div>
                 `;
+<<<<<<< HEAD
             }).join('');
+=======
+                const finishBtn = document.getElementById('finish-study-session-btn');
+                if (finishBtn) {
+                    finishBtn.addEventListener('click', () => {
+                        navigate(VIEWS.DASHBOARD);
+                        saveStateToFirestore(); // Guardar cambios al final
+                    });
+                }
+            }
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+            return;
+        }
+
+        // Mostrar tarjeta actual
+        if (studyProgress) studyProgress.textContent = `Progreso: ${currentCardIndex + 1} / ${reviewList.length}`; // +1 para usuario
+        const currentCard = reviewList[currentCardIndex];
+
+        // Mostrar pregunta
+        if (studyQuestionImg) {
+            studyQuestionImg.src = currentCard.questionImg || '';
+            studyQuestionImg.classList.toggle('hidden', !currentCard.questionImg);
+            studyQuestionImg.onerror = () => { if(studyQuestionImg) studyQuestionImg.classList.add('hidden'); };
+        }
+        if (studyQuestionTextEl) studyQuestionTextEl.textContent = currentCard.question;
+
+        // Ocultar respuesta (y pre-cargarla)
+        if (studyAnswerImg) {
+            studyAnswerImg.src = ''; // Limpiar src
+            studyAnswerImg.classList.add('hidden');
+            studyAnswerImg.onerror = () => { if(studyAnswerImg) studyAnswerImg.classList.add('hidden'); };
+        }
+        if (studyAnswerTextEl) {
+             studyAnswerTextEl.textContent = currentCard.answer; // CORREGIDO: Cargar respuesta correcta
+            if (studyAnswerTextEl.parentElement) studyAnswerTextEl.parentElement.classList.add('hidden'); // Ocultar contenedor
+        }
+
+        // Controlar visibilidad de botones
+        if (studyDifficultyBtns) studyDifficultyBtns.classList.add('hidden');
+        if (showAnswerBtn) showAnswerBtn.classList.remove('hidden');
+        if (studyCard) studyCard.classList.remove('hidden');
+
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+    }
+
+    // Listener "Mostrar Respuesta" (revisado)
+    if (showAnswerBtn) {
+        showAnswerBtn.addEventListener('click', () => {
+             if (!state.studySession) return;
+            const { cardsToReview, currentCardIndex } = state.studySession;
+             const reviewList = Array.isArray(cardsToReview) ? cardsToReview : [];
+            if (currentCardIndex >= reviewList.length) return; // Salir si no hay tarjeta actual
+
+            const currentCard = reviewList[currentCardIndex];
+
+            // Mostrar respuesta
+            if (studyAnswerImg) {
+                studyAnswerImg.src = currentCard.answerImg || '';
+                studyAnswerImg.classList.toggle('hidden', !currentCard.answerImg);
+            }
+             if (studyAnswerTextEl?.parentElement) {
+                // El texto ya está cargado, solo mostrar el contenedor
+                studyAnswerTextEl.parentElement.classList.remove('hidden');
+            }
+
+            // Cambiar botones
+            showAnswerBtn.classList.add('hidden');
+            if (studyDifficultyBtns) studyDifficultyBtns.classList.remove('hidden');
+        });
+    }
+
+    // Listener botones dificultad (revisado, asegurar que deck y card existen)
+     if (studyDifficultyBtns) {
+        studyDifficultyBtns.addEventListener('click', (e) => {
+            const difficulty = e.target.closest('button')?.dataset.difficulty;
+            if (!difficulty) return;
+
+            if (!state.studySession) return;
+            const { cardsToReview, currentCardIndex } = state.studySession;
+            const reviewList = Array.isArray(cardsToReview) ? cardsToReview : [];
+            if (currentCardIndex >= reviewList.length) return;
+
+            const card = reviewList[currentCardIndex];
+
+            let { interval = 0, easeFactor = 2.5 } = card; // Usar defaults si no existen
+
+            let nextInterval;
+            let newEaseFactor = easeFactor;
+
+            if (difficulty === 'easy') {
+                nextInterval = getNextInterval(interval, 'easy');
+                newEaseFactor = Math.min(3.0, newEaseFactor + 0.15);
+                 if (isNaN(state.points)) state.points = 0; state.points += 3;
+            } else if (difficulty === 'good') {
+                nextInterval = getNextInterval(interval, 'good');
+                 if (isNaN(state.points)) state.points = 0; state.points += 2;
+            } else { // 'hard'
+                nextInterval = 0; // Reiniciar
+                newEaseFactor = Math.max(1.3, newEaseFactor - 0.2);
+                 if (isNaN(state.points)) state.points = 0; state.points += 1;
+            }
+
+            // Calcular nueva fecha de revisión
+            const nextReviewDate = new Date(getTodayString() + 'T00:00:00Z'); // Usar Z para UTC
+             // Asegurarse que nextInterval es un número finito
+            const daysToAdd = Number.isFinite(nextInterval) ? Math.round(nextInterval) : 1;
+            nextReviewDate.setDate(nextReviewDate.getDate() + daysToAdd);
+
+             // Encontrar y actualizar la tarjeta original en el estado global 'state.decks'
+            const deck = state.decks?.find(d => d.id === state.currentDeckId);
+            const cardInDeck = deck?.cards?.find(c => c.id === card.id);
+            if (cardInDeck) {
+                cardInDeck.interval = nextInterval;
+                cardInDeck.easeFactor = newEaseFactor;
+                cardInDeck.nextReviewDate = nextReviewDate.toISOString().split('T')[0]; // Guardar como YYYY-MM-DD
+                 console.log("Tarjeta actualizada:", cardInDeck);
+            } else {
+                 console.warn("No se encontró la tarjeta original en el deck para actualizar:", card.id);
+            }
+
+            // Avanzar a la siguiente tarjeta en la sesión actual
+            state.studySession.currentCardIndex++;
+            renderStudyView(); // Mostrar siguiente o fin
+             // Guardar cambios después de cada calificación
+             saveStateToFirestore();
+        });
+    }
+
+    // Función SM-2 simplificada (sin cambios)
+    function getNextInterval(lastInterval, difficulty) {
+        if (difficulty === 'hard') return Math.max(1, Math.floor(lastInterval / 2));
+        if (lastInterval === 0) return (difficulty === 'easy') ? 4 : 1;
+        if (lastInterval === 1) return (difficulty === 'easy') ? 7 : 3;
+        let next = lastInterval * (difficulty === 'easy' ? 2.5 : 2.0);
+        return Math.min(Math.round(next), 60);
+    }
+
+
+    // --- Lógica de Quiz (revisada para seguridad) ---
+    let quizState = { questions: [], currentQuestionIndex: 0, score: 0, answered: false };
+
+    function startQuiz() {
+        if (!Array.isArray(state.decks)) state.decks = [];
+        const deck = state.decks.find(d => d.id === state.currentDeckId);
+        const cards = Array.isArray(deck?.cards) ? deck.cards : [];
+        if (!deck || cards.length < 4) {
+             showNotification("Necesitas al menos 4 tarjetas para un quiz.");
+            return;
+        }
+
+        logStudyActivity(); // Loguear actividad
+
+        const shuffledCards = [...cards].sort(() => Math.random() - 0.5);
+        quizState.questions = shuffledCards.map(card => generateQuizQuestion(card, cards));
+        quizState.currentQuestionIndex = 0;
+        quizState.score = 0;
+        quizState.answered = false;
+
+        navigate(VIEWS.QUIZ); // Navegar a la vista
+        // renderQuizView(); // render() se llamará automáticamente
+    }
+
+    // Generar pregunta de quiz (revisado placeholder)
+    function generateQuizQuestion(correctCard, allCards) {
+        let options = [correctCard.answer];
+        const incorrectCards = allCards.filter(c => c.id !== correctCard.id);
+        const shuffledIncorrect = [...incorrectCards].sort(() => Math.random() - 0.5);
+
+        for (let i = 0; options.length < 4 && i < shuffledIncorrect.length; i++) {
+             if (!options.includes(shuffledIncorrect[i].answer)) {
+                 options.push(shuffledIncorrect[i].answer);
+             }
+        }
+         // Rellenar si faltan opciones
+        let fillerIndex = 1;
+         while (options.length < 4) {
+             const filler = `Opción ${fillerIndex++}`;
+             if (!options.includes(filler)) options.push(filler);
+             else options.push(Math.random().toString(16).substring(2, 8)); // fallback aleatorio
+         }
+
+        options.sort(() => Math.random() - 0.5); // Barajar
+
+        return { question: correctCard.question, options, correctAnswer: correctCard.answer };
+    }
+
+    // Renderizar vista de quiz (revisado)
+    function renderQuizView() {
+        if (!Array.isArray(state.decks)) state.decks = [];
+        const deck = state.decks.find(d => d.id === state.currentDeckId);
+        if (!deck) { navigate(VIEWS.DASHBOARD); return; }
+
+        if (quizDeckTitle) quizDeckTitle.textContent = `Quiz: ${deck.name}`;
+        if (quizFeedback) quizFeedback.classList.add('hidden');
+        if (nextQuizQuestionBtn) nextQuizQuestionBtn.classList.add('hidden');
+
+        const { questions, currentQuestionIndex } = quizState;
+
+        // Fin del quiz
+        if (currentQuestionIndex >= questions.length) {
+            const scorePercent = (questions.length > 0) ? Math.round((quizState.score / questions.length) * 100) : 0;
+            if (quizQuestionText) quizQuestionText.textContent = '¡Quiz completado!';
+            if (quizOptionsList) {
+                quizOptionsList.innerHTML = `
+                    <p class="text-xl text-center text-slate-300">
+                        Puntuación: ${quizState.score} / ${questions.length} (${scorePercent}%)
+                    </p>
+                    <button id="finish-quiz-btn" class="w-full mt-6 bg-teal-600 hover:bg-teal-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors">
+                        Volver
+                    </button>`;
+                document.getElementById('finish-quiz-btn')?.addEventListener('click', () => {
+                    navigate(VIEWS.DASHBOARD);
+                    saveStateToFirestore(); // Guardar puntos acumulados
+                });
+            }
+             if (typeof lucide !== 'undefined') lucide.createIcons();
+            return;
+        }
+
+        // Mostrar pregunta actual
+        if (quizProgress) quizProgress.textContent = `Pregunta: ${currentQuestionIndex + 1} / ${questions.length}`;
+        const question = questions[currentQuestionIndex];
+        if (quizQuestionText) quizQuestionText.textContent = question.question;
+
+        if (quizOptionsList) {
+            quizOptionsList.innerHTML = ''; // Limpiar
+            question.options.forEach(option => {
+                const optionEl = document.createElement('button');
+                optionEl.className = 'quiz-option w-full bg-slate-700 hover:bg-slate-600 text-slate-200 text-left p-4 rounded-lg transition-colors';
+                optionEl.textContent = option;
+                quizOptionsList.appendChild(optionEl);
+            });
+        }
+
+        quizState.answered = false; // Permitir nueva respuesta
+         if (typeof lucide !== 'undefined') lucide.createIcons();
+    }
+
+    // Listener opciones quiz (revisado)
+    if (quizOptionsList) {
+        quizOptionsList.addEventListener('click', (e) => {
+            const selectedOption = e.target.closest('.quiz-option');
+            if (!selectedOption || quizState.answered) return;
+
+            quizState.answered = true;
+            const answer = selectedOption.textContent;
+            const question = quizState.questions[quizState.currentQuestionIndex];
+
+            // Deshabilitar y colorear opciones
+            quizOptionsList.querySelectorAll('.quiz-option').forEach(btn => {
+                btn.disabled = true;
+                btn.classList.add('opacity-70'); // Atenuar todas
+                if (btn.textContent === question.correctAnswer) {
+                     btn.classList.remove('bg-slate-700', 'hover:bg-slate-600', 'opacity-70');
+                     btn.classList.add('bg-green-700'); // Verde correcta
+                } else if (btn === selectedOption) { // Si es la seleccionada e incorrecta
+                     btn.classList.remove('bg-slate-700', 'hover:bg-slate-600', 'opacity-70');
+                     btn.classList.add('bg-red-700'); // Rojo incorrecta
+                }
+            });
+
+            // Dar feedback y puntos
+            if (answer === question.correctAnswer) {
+                if (quizFeedback) {
+                    quizFeedback.textContent = '¡Correcto! +10 puntos';
+                    quizFeedback.className = 'p-3 rounded-lg bg-green-900 text-green-200 mt-4';
+                }
+                quizState.score++;
+                 if (isNaN(state.points)) state.points = 0; state.points += 10;
+                 // Actualizar puntos en header al instante
+                 const pointsDisplay = document.getElementById('points');
+                 if (pointsDisplay) pointsDisplay.textContent = `${state.points} pts`;
+
+            } else {
+                 if (quizFeedback) {
+                    quizFeedback.textContent = `Incorrecto. Correcta: ${question.correctAnswer}`;
+                    quizFeedback.className = 'p-3 rounded-lg bg-red-900 text-red-200 mt-4';
+                }
+            }
+
+            if (quizFeedback) quizFeedback.classList.remove('hidden');
+            if (nextQuizQuestionBtn) nextQuizQuestionBtn.classList.remove('hidden');
+            // NO guardar aquí, se guarda al final del quiz
+        });
+    }
+
+    // Listener botón siguiente quiz (sin cambios)
+    if (nextQuizQuestionBtn) {
+        nextQuizQuestionBtn.addEventListener('click', () => {
+            quizState.currentQuestionIndex++;
+            renderQuizView();
+        });
+    }
+
+
+    // --- Lógica del Pomodoro (sin cambios) ---
+    function updatePomodoroUI() {
+        if (!pomodoroTimerEl) return;
+        const pom = state.pomodoro || defaultState.pomodoro;
+        const timeLeft = pom.timeLeft ?? (25 * 60);
+        const minutes = Math.floor(timeLeft / 60);
+        const seconds = timeLeft % 60;
+        pomodoroTimerEl.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        if (startPomodoroBtn) startPomodoroBtn.textContent = pom.isRunning ? 'Pausar' : 'Iniciar';
+        // Cambio de color de fondo
+        if (pom.isBreak) { document.body.classList.add('bg-teal-900'); document.body.classList.remove('bg-slate-900'); }
+        else { document.body.classList.remove('bg-teal-900'); document.body.classList.add('bg-slate-900'); }
+    }
+    function startPomodoro() {
+        if (!state.pomodoro) state.pomodoro = { ...defaultState.pomodoro };
+        if (state.pomodoro.isRunning) { 
+            // PAUSAR: solo detener el timer y actualizar timeLeft
+            clearInterval(state.pomodoro.timer); 
+            state.pomodoro.isRunning = false;
+            // Calcular el tiempo restante actual y guardarlo
+            if (state.pomodoro.endTime && state.pomodoro.endTime > Date.now()) {
+                state.pomodoro.timeLeft = Math.round((state.pomodoro.endTime - Date.now()) / 1000);
+            }
+            state.pomodoro.endTime = null; // Limpiar endTime al pausar
+        }
+        else {
+            // INICIAR/REANUDAR: usar el timeLeft actual
+            state.pomodoro.isRunning = true;
+            state.pomodoro.endTime = Date.now() + (state.pomodoro.timeLeft * 1000);
+            
+            state.pomodoro.timer = setInterval(() => {
+                const timeLeftMs = (state.pomodoro.endTime || 0) - Date.now();
+                if (timeLeftMs <= 0) handlePomodoroFinish();
+                else state.pomodoro.timeLeft = Math.round(timeLeftMs / 1000);
+                updatePomodoroUI();
+            }, 1000);
+        }
+        updatePomodoroUI();
+        saveStateToFirestore();
+    }
+    function handlePomodoroFinish() {
+        clearInterval(state.pomodoro.timer);
+        if (!state.pomodoro) state.pomodoro = { ...defaultState.pomodoro };
+        state.pomodoro.isRunning = false; state.pomodoro.endTime = null;
+        playPomodoroSound(state.pomodoro.isBreak);
+        if (state.pomodoro.isBreak) { state.pomodoro.isBreak = false; state.pomodoro.timeLeft = 25 * 60; showNotification("¡Descanso terminado!"); }
+        else { state.pomodoro.isBreak = true; state.pomodoro.timeLeft = 5 * 60; if (isNaN(state.points)) state.points = 0; state.points += 25; if (isNaN(state.studyTimeMinutes)) state.studyTimeMinutes = 0; state.studyTimeMinutes += 25; logStudyActivity(); showNotification("¡Pomodoro! +25 pts. Descanso..."); }
+        updatePomodoroUI();
+        saveStateToFirestore();
+    }
+    function resetPomodoro() {
+        clearInterval(state.pomodoro?.timer);
+        state.pomodoro = { ...defaultState.pomodoro }; // Reset completo
+        updatePomodoroUI();
+        saveStateToFirestore();
+    }
+    function checkRunningPomodoro() {
+        if (state.pomodoro?.endTime && state.pomodoro.endTime > Date.now()) { state.pomodoro.timeLeft = Math.round((state.pomodoro.endTime - Date.now()) / 1000); startPomodoro(); }
+        else if (state.pomodoro?.endTime && state.pomodoro.endTime <= Date.now()) { handlePomodoroFinish(); }
+    }
+    if (startPomodoroBtn) startPomodoroBtn.addEventListener('click', startPomodoro);
+    if (resetPomodoroBtn) resetPomodoroBtn.addEventListener('click', resetPomodoro);
+
+    // --- Utilidades ---
+    function getTodayString() { return new Date().toISOString().split('T')[0]; }
+    
+    // Función para convertir archivo de imagen a Base64
+    function fileToBase64(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = error => reject(error);
+            reader.readAsDataURL(file);
+        });
+    }
+    
+    function showNotification(message) { /* ... sin cambios ... */ }
+    let audioCtx; function playPomodoroSound(isBreak) { /* ... sin cambios ... */ }
+     // Función para mostrar modal de confirmación (simple)
+    function showConfirmationModal(message, onConfirm) {
+        // TODO: Implementar un modal HTML en lugar de window.confirm
+        if (window.confirm(message)) {
+            onConfirm();
+>>>>>>> fec937e (cambios en pomodoro y flashcards)
         }
     }
 }
