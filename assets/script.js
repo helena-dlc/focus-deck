@@ -322,8 +322,15 @@ document.addEventListener('DOMContentLoaded', () => {
             currentUserId = user.uid;
 
             // Mostrar app, ocultar login
-            if (loginView) loginView.classList.add('hidden');
-            if (mainContent) mainContent.classList.remove('hidden');
+            if (loginView) {
+                loginView.classList.add('hidden');
+                loginView.classList.remove('active');
+                loginView.style.display = 'none'; // Asegurar que se oculte
+            }
+            if (mainContent) {
+                mainContent.classList.remove('hidden');
+                mainContent.style.display = 'block'; // Asegurar que se muestre
+            }
 
             // Actualizar header dinámicamente
             updateAuthUI(user);
@@ -336,8 +343,15 @@ document.addEventListener('DOMContentLoaded', () => {
             currentUserId = null;
 
             // Mostrar login, ocultar app
-            if (loginView) loginView.classList.remove('hidden');
-            if (mainContent) mainContent.classList.add('hidden');
+            if (loginView) {
+                loginView.classList.remove('hidden');
+                loginView.classList.add('active');
+                loginView.style.display = 'block';
+            }
+            if (mainContent) {
+                mainContent.classList.add('hidden');
+                mainContent.style.display = 'none';
+            }
 
             // Limpiar header
             updateAuthUI(null);
