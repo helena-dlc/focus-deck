@@ -8,19 +8,19 @@
     <!-- 1. LIBRERÍA DE TAILWIND -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- 2. CONFIGURACIÓN DE TAILWIND (¡Se queda aquí!) -->
+    <!-- 2. CONFIGURACIÓN DE TAILWIND -->
     <script>
         tailwind.config = {
             darkMode: 'class',
             theme: {
                 extend: {
                     colors: {
-                        'primary': '#2dd4bf', // Teal 400
-                        'primary-dark': '#14b8a6', // Teal 500
-                        'secondary': '#f8fafc', // Slate 50
-                        'dark-bg': '#0f172a', // Slate 900
-                        'dark-card': '#1e293b', // Slate 800
-                        'dark-border': '#334155', // Slate 700
+                        'primary': '#2dd4bf',
+                        'primary-dark': '#14b8a6',
+                        'secondary': '#f8fafc',
+                        'dark-bg': '#0f172a',
+                        'dark-card': '#1e293b',
+                        'dark-border': '#334155',
                     },
                     fontFamily: {
                         sans: ['Inter', 'sans-serif'],
@@ -38,9 +38,6 @@
     
     <!-- 4. ICONOS -->
     <script src="https://unpkg.com/lucide@latest"></script>
-
-    <!-- 5. SDK DE FIREBASE (¡NUEVO!) -->
-    <!-- Dejamos esto vacío a propósito. Cargaremos los scripts como módulos en el script.js -->
 </head>
 <body class="bg-dark-bg text-secondary font-sans antialiased">
 
@@ -49,15 +46,15 @@
         <!-- Header -->
         <header class="flex justify-between items-center mb-6">
             <h1 class="text-3xl font-bold text-primary">Focus Deck</h1>
-            <!-- Contenedor de Autenticación (REEMPLAZA A PUNTOS) -->
+            <!-- Contenedor de Autenticación -->
             <div id="auth-container" class="flex items-center gap-2">
-                <!-- El botón de Iniciar Sesión o el perfil de usuario se cargarán aquí -->
+                <!-- El botón de login o perfil se carga aquí dinámicamente -->
             </div>
         </header>
 
         <!-- Main Content -->
         
-        <!-- Vista de Login (¡NUEVA!) -->
+        <!-- Vista de Login -->
         <div id="login-view" class="view active animate-fade-in text-center p-8 bg-dark-card rounded-2xl max-w-md mx-auto mt-10">
             <h2 class="text-2xl font-bold mb-4">Bienvenido a Focus Deck</h2>
             <p class="text-slate-300 mb-6">Inicia sesión para sincronizar tu progreso en la nube de forma segura.</p>
@@ -68,7 +65,7 @@
             </button>
         </div>
 
-        <!-- Contenido principal de la App (¡NUEVO! Oculto por defecto) -->
+        <!-- Contenido principal de la App -->
         <main id="main-content" class="flex-grow hidden">
             <!-- Dashboard View -->
             <div id="dashboard-view" class="view active animate-fade-in">
@@ -77,9 +74,9 @@
                     <div class="bg-dark-card p-6 rounded-2xl shadow-lg">
                         <h2 class="text-xl font-bold mb-4 flex items-center gap-2"><i data-lucide="timer" class="w-6 h-6 text-primary"></i>Temporizador Pomodoro</h2>
                         <div id="pomodoro-timer" class="text-6xl font-bold text-center my-6">25:00</div>
-                        <div id="pomodoro-controls" class="flex justify-center gap-4">
-                            <button id="start-pomodoro" class="bg-primary hover:bg-primary-dark text-dark-bg font-bold py-2 px-6 rounded-full transition-colors">Iniciar</button>
-                            <button id="reset-pomodoro" class="bg-dark-border hover:bg-slate-600 text-secondary font-bold py-2 px-6 rounded-full transition-colors">Resetear</button>
+                        <div class="flex justify-center gap-4">
+                            <button id="start-pomodoro-btn" class="bg-primary hover:bg-primary-dark text-dark-bg font-bold py-2 px-6 rounded-full transition-colors">Iniciar</button>
+                            <button id="reset-pomodoro-btn" class="bg-dark-border hover:bg-slate-600 text-secondary font-bold py-2 px-6 rounded-full transition-colors">Resetear</button>
                         </div>
                     </div>
 
@@ -87,11 +84,11 @@
                     <div class="bg-dark-card p-6 rounded-2xl shadow-lg">
                         <h2 class="text-xl font-bold mb-4 flex items-center gap-2"><i data-lucide="check-circle-2" class="w-6 h-6 text-primary"></i>Lista de Tareas</h2>
                         <div class="flex gap-2 mb-4">
-                            <input type="text" id="new-task-input" placeholder="Añadir nueva tarea..." class="flex-grow bg-dark-bg border border-dark-border rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-primary">
-                             <select id="task-priority" class="bg-dark-bg border border-dark-border rounded-full px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary">
-                                <option value="3">Baja</option>
-                                <option value="2">Media</option>
-                                <option value="1">Alta</option>
+                            <input type="text" id="task-input" placeholder="Añadir nueva tarea..." class="flex-grow bg-dark-bg border border-dark-border rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-primary">
+                            <select id="task-priority" class="bg-dark-bg border border-dark-border rounded-full px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary">
+                                <option value="Baja">Baja</option>
+                                <option value="Media">Media</option>
+                                <option value="Alta">Alta</option>
                             </select>
                             <button id="add-task-btn" class="bg-primary hover:bg-primary-dark text-dark-bg font-bold p-2 rounded-full"><i data-lucide="plus" class="w-6 h-6"></i></button>
                         </div>
@@ -99,94 +96,81 @@
                             <!-- Tasks will be rendered here -->
                         </div>
                     </div>
-
-                    <!-- Stats Card - MOVED from here -->
                 </div>
 
                 <!-- Decks -->
                 <div class="mt-8">
                     <div class="flex justify-between items-center mb-4">
                         <h2 class="text-2xl font-bold">Mis Temas de Estudio</h2>
-                        <button id="add-deck-btn" class="bg-primary hover:bg-primary-dark text-dark-bg font-bold py-2 px-4 rounded-full flex items-center gap-2"><i data-lucide="plus-circle" class="w-5 h-5"></i>Nuevo Tema</button>
+                        <button id="new-deck-btn" class="bg-primary hover:bg-primary-dark text-dark-bg font-bold py-2 px-4 rounded-full flex items-center gap-2"><i data-lucide="plus-circle" class="w-5 h-5"></i>Nuevo Tema</button>
                     </div>
+                    <p id="no-decks-message" class="text-center text-slate-400 py-8 hidden">No hay temas aún. ¡Crea el primero!</p>
                     <div id="deck-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                         <!-- Decks will be rendered here -->
                     </div>
                 </div>
 
-                <!-- Stats Card (MOVED HERE) -->
+                <!-- Stats Card -->
                 <div class="bg-dark-card p-6 rounded-2xl shadow-lg mt-8">
                     <h2 class="text-xl font-bold mb-4 flex items-center gap-2"><i data-lucide="bar-chart-3" class="w-6 h-6 text-primary"></i>Estadísticas de Progreso</h2>
                     <div class="grid grid-cols-2 md:grid-cols-3 gap-4 text-center">
                         <div>
-                            <div id="stats-streak" class="text-3xl font-bold text-primary">0</div>
+                            <div id="streak-days" class="text-3xl font-bold text-primary">0</div>
                             <div class="text-sm text-slate-400">Días de Racha</div>
                         </div>
                         <div>
-                            <div id="stats-hours" class="text-3xl font-bold text-primary">0.0</div>
+                            <div id="study-time" class="text-3xl font-bold text-primary">0.0</div>
                             <div class="text-sm text-slate-400">Horas Estudiadas</div>
                         </div>
                         <div>
-                            <div id="stats-mastery" class="text-3xl font-bold text-primary">0%</div>
+                            <div id="total-domain" class="text-3xl font-bold text-primary">0%</div>
                             <div class="text-sm text-slate-400">Dominio Total</div>
                         </div>
                     </div>
-                     <!-- Avance por temas -->
+                    <!-- Avance por temas -->
                     <h3 class="text-lg font-semibold mt-6 mb-2">Avance por Tema</h3>
-                    <div id="stats-deck-progress" class="space-y-2">
+                    <div id="domain-by-deck-list" class="space-y-2">
                         <!-- Progress bars will be rendered here -->
                     </div>
                 </div>
-
             </div>
 
             <!-- Study View -->
             <div id="study-view" class="view">
-                 <button id="back-to-dashboard-study" class="mb-4 bg-dark-card hover:bg-slate-600 p-2 rounded-full"><i data-lucide="arrow-left" class="w-6 h-6"></i></button>
-                <h2 id="study-deck-name" class="text-3xl font-bold text-center mb-2"></h2>
-                <p id="study-progress-text" class="text-center text-slate-400 mb-4">Progreso: 0/0</p>
-                <div id="study-progress-bar" class="w-full bg-dark-card rounded-full h-2.5 mb-6">
-                  <div class="bg-primary h-2.5 rounded-full progress-bar-inner" style="width: 0%"></div>
-                </div>
+                <button id="back-to-dashboard-study" class="mb-4 bg-dark-card hover:bg-slate-600 p-2 rounded-full"><i data-lucide="arrow-left" class="w-6 h-6"></i></button>
+                <h2 id="study-deck-title" class="text-3xl font-bold text-center mb-2"></h2>
+                <p id="study-progress" class="text-center text-slate-400 mb-4">Progreso: 0/0</p>
 
-                <div id="flashcard-container" class="perspective-1000">
-                    <div class="card relative w-full h-80">
-                        <div class="card-inner w-full h-full">
-                            <div id="card-front" class="card-face absolute w-full h-full bg-dark-card rounded-2xl p-6 flex flex-col items-center justify-center text-center">
-                                <img id="card-front-img" src="" class="max-h-40 mb-4 hidden rounded-lg" onerror="this.style.display='none'; this.src=''">
-                                <p class="text-2xl"></p>
-                            </div>
-                            <div id="card-back" class="card-face absolute w-full h-full bg-dark-card rounded-2xl p-6 flex flex-col items-center justify-center text-center card-back">
-                                <img id="card-back-img" src="" class="max-h-40 mb-4 hidden rounded-lg" onerror="this.style.display='none'; this.src=''">
-                                <p class="text-2xl font-semibold text-primary"></p>
-                            </div>
-                        </div>
+                <div id="study-card" class="bg-dark-card rounded-2xl p-8 mb-6 min-h-[300px] flex flex-col items-center justify-center">
+                    <!-- Question -->
+                    <div class="w-full text-center">
+                        <img id="study-question-img" src="" class="max-h-40 mx-auto mb-4 hidden rounded-lg" onerror="this.style.display='none'">
+                        <p id="study-question-text" class="text-2xl font-semibold mb-6"></p>
+                    </div>
+                    
+                    <!-- Answer (hidden initially) -->
+                    <div class="w-full text-center border-t border-slate-700 pt-6 mt-6 hidden">
+                        <img id="study-answer-img" src="" class="max-h-40 mx-auto mb-4 hidden rounded-lg" onerror="this.style.display='none'">
+                        <p id="study-answer-text" class="text-2xl text-primary"></p>
                     </div>
                 </div>
-                
-                <div id="study-controls-show" class="mt-6 flex justify-center">
+
+                <div class="flex justify-center">
                     <button id="show-answer-btn" class="bg-primary hover:bg-primary-dark text-dark-bg font-bold py-3 px-8 text-lg rounded-full">Mostrar Respuesta</button>
                 </div>
-                
-                <div id="study-controls-rate" class="mt-6 hidden flex-col sm:flex-row justify-center gap-4">
-                    <button data-difficulty="hard" class="rate-btn bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-6 rounded-full">Difícil <span class="text-sm block">(Revisar pronto)</span></button>
-                    <button data-difficulty="good" class="rate-btn bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-full">Bien <span class="text-sm block">(Normal)</span></button>
-                    <button data-difficulty="easy" class="rate-btn bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-full">Fácil <span class="text-sm block">(Revisar después)</span></button>
-                </div>
 
-                <div id="study-complete" class="hidden text-center mt-8">
-                     <h3 class="text-3xl font-bold text-primary mb-4">¡Sesión Completada!</h3>
-                     <p class="mb-4">¡Gran trabajo! Has revisado todas las tarjetas de hoy.</p>
-                     <p id="session-points" class="text-xl font-semibold mb-6"></p>
-                     <button id="finish-session-btn" class="bg-primary hover:bg-primary-dark text-dark-bg font-bold py-2 px-6 rounded-full">Volver al Dashboard</button>
+                <div id="study-difficulty-btns" class="mt-6 hidden flex flex-col sm:flex-row justify-center gap-4">
+                    <button data-difficulty="hard" class="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-6 rounded-full">Difícil <span class="text-sm block">(Revisar pronto)</span></button>
+                    <button data-difficulty="good" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-full">Bien <span class="text-sm block">(Normal)</span></button>
+                    <button data-difficulty="easy" class="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-full">Fácil <span class="text-sm block">(Revisar después)</span></button>
                 </div>
             </div>
 
             <!-- Deck Management View -->
-            <div id="deck-manage-view" class="view">
+            <div id="manage-deck-view" class="view">
                 <button id="back-to-dashboard-manage" class="mb-4 bg-dark-card hover:bg-slate-600 p-2 rounded-full"><i data-lucide="arrow-left" class="w-6 h-6"></i></button>
                 <div class="flex flex-col sm:flex-row justify-between sm:items-center mb-4 gap-4">
-                    <h2 id="manage-deck-name" class="text-3xl font-bold"></h2>
+                    <h2 id="manage-deck-title" class="text-3xl font-bold"></h2>
                     <div>
                         <button id="delete-deck-btn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-full flex items-center gap-2"><i data-lucide="trash-2" class="w-5 h-5"></i>Eliminar Tema</button>
                     </div>
@@ -221,56 +205,31 @@
 
             <!-- Quiz View -->
             <div id="quiz-view" class="view">
-                 <button id="back-to-dashboard-quiz" class="mb-4 bg-dark-card hover:bg-slate-600 p-2 rounded-full"><i data-lucide="arrow-left" class="w-6 h-6"></i></button>
-                 <h2 id="quiz-deck-name" class="text-3xl font-bold text-center mb-6"></h2>
-                 <div id="quiz-container">
-                     <!-- Quiz content is generated here -->
-                 </div>
-                 <div id="quiz-results" class="hidden text-center mt-8">
-                     <h3 class="text-3xl font-bold text-primary mb-4">¡Quiz Completado!</h3>
-                     <p id="quiz-score" class="text-2xl mb-4"></p>
-                     <p id="quiz-points" class="text-xl font-semibold mb-6"></p>
-                     <button id="finish-quiz-btn" class="bg-primary hover:bg-primary-dark text-dark-bg font-bold py-2 px-6 rounded-full">Volver al Dashboard</button>
-                 </div>
-            </div>
+                <button id="back-to-dashboard-quiz" class="mb-4 bg-dark-card hover:bg-slate-600 p-2 rounded-full"><i data-lucide="arrow-left" class="w-6 h-6"></i></button>
+                <h2 id="quiz-deck-title" class="text-3xl font-bold text-center mb-2"></h2>
+                <p id="quiz-progress" class="text-center text-slate-400 mb-6">Pregunta: 0/0</p>
+                
+                <div class="bg-dark-card rounded-2xl p-8 mb-6">
+                    <p id="quiz-question-text" class="text-2xl font-semibold text-center mb-6"></p>
+                    <div id="quiz-options" class="space-y-3">
+                        <!-- Quiz options will be rendered here -->
+                    </div>
+                </div>
 
+                <div id="quiz-feedback" class="hidden p-4 rounded-lg text-center mb-4"></div>
+                <div class="flex justify-center">
+                    <button id="next-quiz-question-btn" class="hidden bg-primary hover:bg-primary-dark text-dark-bg font-bold py-2 px-6 rounded-full">Siguiente</button>
+                </div>
+            </div>
         </main>
     </div>
 
-    <!-- Modal for New Deck -->
-    <div id="new-deck-modal" class="fixed inset-0 bg-black bg-opacity-70 hidden items-center justify-center p-4 z-50">
-        <div class="bg-dark-card rounded-2xl p-8 shadow-2xl w-full max-w-md">
-            <h2 class="text-2xl font-bold mb-4">Crear Nuevo Tema</h2>
-            <input type="text" id="new-deck-name" placeholder="Nombre del tema (e.g., 'Historia de Roma')" class="w-full bg-dark-bg border border-dark-border rounded-full px-4 py-3 mb-6 focus:outline-none focus:ring-2 focus:ring-primary">
-            <div class="flex justify-end gap-4">
-                <button id="cancel-deck-modal" class="bg-dark-border hover:bg-slate-600 text-secondary font-bold py-2 px-6 rounded-full">Cancelar</button>
-                <button id="save-deck-modal" class="bg-primary hover:bg-primary-dark text-dark-bg font-bold py-2 px-6 rounded-full">Crear</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Notification Modal -->
-    <div id="notification-modal" class="fixed inset-0 bg-black bg-opacity-70 hidden items-center justify-center p-4 z-50">
-        <div class="bg-dark-card rounded-2xl p-8 shadow-2xl w-full max-w-sm text-center">
-            <p id="notification-text" class="text-lg mb-6"></p>
-            <button id="notification-ok-btn" class="bg-primary hover:bg-primary-dark text-dark-bg font-bold py-2 px-6 rounded-full">OK</button>
-        </div>
-    </div>
-
-    <!-- Confirm Modal -->
-    <div id="confirm-modal" class="fixed inset-0 bg-black bg-opacity-70 hidden items-center justify-center p-4 z-50">
-        <div class="bg-dark-card rounded-2xl p-8 shadow-2xl w-full max-w-sm">
-            <h3 class="text-xl font-bold mb-4">¿Estás seguro?</h3>
-            <p id="confirm-text" class="text-slate-300 mb-6"></p>
-            <div class="flex justify-end gap-4">
-                <button id="confirm-cancel-btn" class="bg-dark-border hover:bg-slate-600 text-secondary font-bold py-2 px-6 rounded-full">Cancelar</button>
-                <button id="confirm-ok-btn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-6 rounded-full">Confirmar</button>
-            </div>
-        </div>
+    <!-- Notification (simple toast) -->
+    <div id="notification" class="fixed bottom-4 right-4 bg-teal-600 text-white px-6 py-3 rounded-lg shadow-lg hidden transition-opacity">
+        Notificación
     </div>
     
-    <!-- 5. LÓGICA DE LA APLICACIÓN (Cargada al final) -->
-    <!-- 'type="module"' es ¡NUEVO y MUY IMPORTANTE! Permite usar 'import' -->
+    <!-- Script -->
     <script src="assets/script.js" type="module" defer></script>
 </body>
 </html>
