@@ -42,6 +42,8 @@ const db = getFirestore(app);
 // --- ESTADO GLOBAL ---
 let currentUserId = null;
 let unsubscribeFromFirestore = null;
+let saveTimeout = null; // Para debounce
+let isLoadingFromFirebase = false; // Flag para evitar bucle
 const defaultState = {
     points: 0,
     decks: [],
@@ -172,57 +174,69 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- State Management & Persistence ---
 
     async function saveStateToFirestore() {
-        if (!currentUserId) return;
-        console.log("Guardando estado para:", currentUserId, state); // Log estado antes de guardar
-        try {
-            // Crear copia profunda para evitar modificar el estado original durante el guardado
-            const stateToSave = JSON.parse(JSON.stringify(state));
+        if (!currentUserId || isLoadingFromFirebase) {
+            console.log("No se guarda: userId=" + currentUserId + ", isLoading=" + isLoadingFromFirebase);
+            return;
+        }
+        
+        // Cancelar guardado anterior si existe
+        if (saveTimeout) {
+            clearTimeout(saveTimeout);
+        }
+        
+        // Esperar 500ms antes de guardar (debounce)
+        saveTimeout = setTimeout(async () => {
+            console.log("Guardando estado para:", currentUserId); 
+            try {
+                // Crear copia profunda para evitar modificar el estado original durante el guardado
+                const stateToSave = JSON.parse(JSON.stringify(state));
 
-            delete stateToSave.pomodoro?.timer;
-            stateToSave.studySession = defaultState.studySession;
+                delete stateToSave.pomodoro?.timer;
+                stateToSave.studySession = defaultState.studySession;
 
-            // Asegurar que decks, tasks y studyLog son arrays
-             stateToSave.decks = Array.isArray(stateToSave.decks) ? stateToSave.decks : [];
-             stateToSave.tasks = Array.isArray(stateToSave.tasks) ? stateToSave.tasks : [];
-             stateToSave.studyLog = Array.isArray(stateToSave.studyLog) ? stateToSave.studyLog : [];
+                // Asegurar que decks, tasks y studyLog son arrays
+                 stateToSave.decks = Array.isArray(stateToSave.decks) ? stateToSave.decks : [];
+                 stateToSave.tasks = Array.isArray(stateToSave.tasks) ? stateToSave.tasks : [];
+                 stateToSave.studyLog = Array.isArray(stateToSave.studyLog) ? stateToSave.studyLog : [];
 
 
-            // Convertir fechas string a Timestamps ANTES de guardar
-            stateToSave.decks = stateToSave.decks.map(deck => ({
-                ...deck,
-                cards: (Array.isArray(deck.cards) ? deck.cards : []).map(card => {
-                    let nextReviewDateTS = card.nextReviewDate;
-                    if (nextReviewDateTS && typeof nextReviewDateTS === 'string') {
-                        try {
-                            // Intentar parsear como YYYY-MM-DD y convertir a Timestamp UTC
-                            const date = new Date(nextReviewDateTS + 'T00:00:00Z');
-                            if (!isNaN(date.getTime())) {
-                                nextReviewDateTS = Timestamp.fromDate(date);
-                            } else {
-                                console.warn("Fecha inválida al guardar:", nextReviewDateTS);
+                // Convertir fechas string a Timestamps ANTES de guardar
+                stateToSave.decks = stateToSave.decks.map(deck => ({
+                    ...deck,
+                    cards: (Array.isArray(deck.cards) ? deck.cards : []).map(card => {
+                        let nextReviewDateTS = card.nextReviewDate;
+                        if (nextReviewDateTS && typeof nextReviewDateTS === 'string') {
+                            try {
+                                // Intentar parsear como YYYY-MM-DD y convertir a Timestamp UTC
+                                const date = new Date(nextReviewDateTS + 'T00:00:00Z');
+                                if (!isNaN(date.getTime())) {
+                                    nextReviewDateTS = Timestamp.fromDate(date);
+                                } else {
+                                    console.warn("Fecha inválida al guardar:", nextReviewDateTS);
+                                    nextReviewDateTS = Timestamp.now();
+                                }
+                            } catch (e) {
+                                console.error("Error convirtiendo fecha string a Timestamp:", nextReviewDateTS, e);
                                 nextReviewDateTS = Timestamp.now();
                             }
-                        } catch (e) {
-                            console.error("Error convirtiendo fecha string a Timestamp:", nextReviewDateTS, e);
+                        } else if (!(nextReviewDateTS instanceof Timestamp)) {
+                            // Si no es string ni Timestamp válido, poner ahora
                             nextReviewDateTS = Timestamp.now();
                         }
-                    } else if (!(nextReviewDateTS instanceof Timestamp)) {
-                        // Si no es string ni Timestamp válido, poner ahora
-                        nextReviewDateTS = Timestamp.now();
-                    }
-                    return { ...card, nextReviewDate: nextReviewDateTS };
-                })
-            }));
+                        return { ...card, nextReviewDate: nextReviewDateTS };
+                    })
+                }));
 
 
-            const userDocRef = doc(db, "users", currentUserId);
-            // Usar setDoc SIN merge para asegurar que se guarde todo el estado limpio
-            await setDoc(userDocRef, stateToSave);
-            console.log("Estado guardado correctamente en Firestore.");
-        } catch (error) {
-            console.error("Error guardando estado en Firestore: ", error);
-            showNotification("Error al guardar tu progreso.");
-        }
+                const userDocRef = doc(db, "users", currentUserId);
+                // Usar setDoc SIN merge para asegurar que se guarde todo el estado limpio
+                await setDoc(userDocRef, stateToSave);
+                console.log("Estado guardado correctamente en Firestore.");
+            } catch (error) {
+                console.error("Error guardando estado en Firestore: ", error);
+                showNotification("Error al guardar tu progreso.");
+            }
+        }, 500); // Esperar 500ms
     }
 
     // Función para procesar datos cargados de Firestore
@@ -271,23 +285,46 @@ document.addEventListener('DOMContentLoaded', () => {
 
         unsubscribeFromFirestore = onSnapshot(userDocRef, (docSnap) => {
             console.log("Recibido snapshot de Firestore. Existe:", docSnap.exists());
+            
+            // Activar flag para evitar que se guarde mientras se carga
+            isLoadingFromFirebase = true;
+            
             if (docSnap.exists()) {
+                console.log("Documento existe, cargando datos...");
                 state = processLoadedData(docSnap.data());
+                console.log("Estado cargado:", state);
             } else {
-                // Documento no existe (podría ser usuario nuevo o datos borrados)
-                console.log("Documento no existe en Firestore para el usuario. Usando estado por defecto.");
+                // Documento no existe (usuario nuevo) - crear uno con estado por defecto
+                console.log("Documento no existe. Creando estado inicial para usuario nuevo...");
                 state = { ...defaultState };
-                 // No guardar aquí automáticamente, esperar a la primera acción del usuario
-                 // saveStateToFirestore(); // Evitar posible bucle si hay problemas
+                console.log("Estado por defecto establecido:", state);
+                // Crear documento inicial en Firestore
+                isLoadingFromFirebase = false; // Permitir guardar para crear documento
+                saveStateToFirestore().then(() => {
+                    console.log("Estado inicial guardado en Firestore exitosamente.");
+                }).catch(err => {
+                    console.error("Error guardando estado inicial:", err);
+                });
             }
+            
+            console.log("Llamando a render()...");
             render(); // Renderizar UI con el estado actualizado
+            console.log("Llamando a checkRunningPomodoro()...");
             checkRunningPomodoro();
+            console.log("listenToUserData completado.");
+            
+            // Desactivar flag después de 1 segundo para permitir guardados futuros
+            setTimeout(() => {
+                isLoadingFromFirebase = false;
+                console.log("Flag isLoadingFromFirebase desactivado, guardado habilitado.");
+            }, 1000);
         }, (error) => {
             console.error("Error en listener onSnapshot: ", error);
             showNotification("Error al sincronizar datos. Intenta recargar.");
-            // Resetear estado local si falla la escucha? Podría ser drástico.
-            // state = { ...defaultState };
-            // render();
+            // En caso de error, usar estado por defecto y renderizar
+            state = { ...defaultState };
+            render();
+            isLoadingFromFirebase = false;
         });
     }
 
