@@ -1,4 +1,4 @@
-console.log("--- SCRIPT DE FOCUS NOOK v5 CARGADO ---");
+console.log("--- SCRIPT DE FOCUS DECK v5 CARGADO ---");
 
 // --- IMPORTACIONES DE FIREBASE ---
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -44,6 +44,10 @@ let currentUserId = null;
 let unsubscribeFromFirestore = null;
 let saveTimeout = null;
 let isLoadingFromFirebase = false;
+
+// CORRECCIÓN: El timer ID debe estar FUERA del state para no perderse al sobrescribir
+let pomodoroIntervalId = null;
+
 const defaultState = {
     points: 0,
     decks: [],
@@ -53,7 +57,6 @@ const defaultState = {
     currentView: 'dashboard-view',
     currentDeckId: null,
     pomodoro: {
-        timer: null,
         timeLeft: 25 * 60,
         isBreak: false,
         isRunning: false,
@@ -182,7 +185,7 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log("💾 Guardando estado para:", currentUserId); 
             try {
                 const stateToSave = JSON.parse(JSON.stringify(state));
-                delete stateToSave.pomodoro?.timer;
+                // NOTA: Ya no hay timer en pomodoro, está en pomodoroIntervalId
                 stateToSave.studySession = defaultState.studySession;
                 stateToSave.decks = Array.isArray(stateToSave.decks) ? stateToSave.decks : [];
                 stateToSave.tasks = Array.isArray(stateToSave.tasks) ? stateToSave.tasks : [];
@@ -224,9 +227,15 @@ document.addEventListener('DOMContentLoaded', () => {
     function processLoadedData(data) {
         console.log("📦 Procesando datos cargados");
         const loadedState = { ...defaultState, ...data };
-        loadedState.pomodoro = { ...defaultState.pomodoro, ...(loadedState.pomodoro || {}) };
-        loadedState.pomodoro.isRunning = false;
-        loadedState.pomodoro.timer = null;
+        
+        // CORRECCIÓN: Solo copiar los datos del pomodoro, NO resetear isRunning
+        // El estado real del timer lo maneja pomodoroIntervalId
+        loadedState.pomodoro = { 
+            ...defaultState.pomodoro, 
+            ...(loadedState.pomodoro || {}),
+        };
+        // IMPORTANTE: No tocamos isRunning aquí, lo determinará checkRunningPomodoro
+        
         loadedState.studySession = defaultState.studySession;
         loadedState.decks = Array.isArray(loadedState.decks) ? loadedState.decks : [];
         loadedState.tasks = Array.isArray(loadedState.tasks) ? loadedState.tasks : [];
@@ -259,14 +268,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const userDocRef = doc(db, "users", userId);
         console.log("👂 Estableciendo listener para:", userId);
+        
+        // CORRECCIÓN: Trackear si es el primer snapshot para saber cuándo inicializar el pomodoro
+        let isFirstSnapshot = true;
 
         unsubscribeFromFirestore = onSnapshot(userDocRef, (docSnap) => {
-            console.log("📨 Snapshot recibido. Existe:", docSnap.exists());
+            console.log("📨 Snapshot recibido. Existe:", docSnap.exists(), "isFirst:", isFirstSnapshot);
             
             isLoadingFromFirebase = true;
             
+            // CORRECCIÓN: Guardar el estado actual del pomodoro antes de sobrescribir
+            const pomodoroWasRunning = pomodoroIntervalId !== null;
+            const currentPomodoroState = state.pomodoro ? { ...state.pomodoro } : null;
+            
             if (docSnap.exists()) {
                 state = processLoadedData(docSnap.data());
+                
+                // CORRECCIÓN: Si el pomodoro estaba corriendo localmente, preservar ese estado
+                if (pomodoroWasRunning && currentPomodoroState) {
+                    state.pomodoro.isRunning = true;
+                    // Mantener el endTime local si el timer está activo
+                    if (currentPomodoroState.endTime) {
+                        state.pomodoro.endTime = currentPomodoroState.endTime;
+                    }
+                }
             } else {
                 console.log("🆕 Usuario nuevo - creando estado inicial");
                 state = { ...defaultState };
@@ -279,14 +304,18 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             render();
-            checkRunningPomodoro();
             
-            // CORREGIDO: Flag se desactiva después del debounce de guardado (500ms) + margen
-            // para evitar condiciones de carrera con saveStateToFirestore
+            // CORRECCIÓN: Solo verificar pomodoro en el PRIMER snapshot
+            if (isFirstSnapshot) {
+                isFirstSnapshot = false;
+                checkRunningPomodoro();
+            }
+            
+            // CORRECCIÓN: Aumentar timeout para evitar race conditions
             setTimeout(() => {
                 isLoadingFromFirebase = false;
                 console.log("🔓 Guardado habilitado");
-            }, 750);
+            }, 1000);
         }, (error) => {
             console.error("❌ Error en listener:", error);
             showNotification("Error al sincronizar datos.");
@@ -1134,6 +1163,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- Pomodoro ---
+    // CORRECCIÓN COMPLETA: Usar pomodoroIntervalId global en lugar de state.pomodoro.timer
+    
     function updatePomodoroUI() {
         if (!pomodoroTimerEl) return;
         const pom = state.pomodoro || defaultState.pomodoro;
@@ -1141,40 +1172,58 @@ document.addEventListener('DOMContentLoaded', () => {
         const minutes = Math.floor(timeLeft / 60);
         const seconds = timeLeft % 60;
         pomodoroTimerEl.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-        if (startPomodoroBtn) startPomodoroBtn.textContent = pom.isRunning ? 'Pausar' : 'Iniciar';
         
-        // CORREGIDO: Usar las clases correctas que coinciden con el diseño
-        // El body original tiene bg-dark-bg, cambiamos a teal para el break
+        // CORRECCIÓN: Usar pomodoroIntervalId para determinar si está corriendo
+        const isActuallyRunning = pomodoroIntervalId !== null;
+        if (startPomodoroBtn) startPomodoroBtn.textContent = isActuallyRunning ? 'Pausar' : 'Iniciar';
+        
+        // CORRECCIÓN: Usar clases CSS correctas
         if (pom.isBreak) { 
-            document.body.classList.add('!bg-teal-900'); 
-            document.body.classList.remove('bg-dark-bg'); 
-            pomodoroTimerEl.classList.add('text-teal-300');
-            pomodoroTimerEl.classList.remove('text-white');
+            pomodoroTimerEl.classList.add('text-teal-400');
+            pomodoroTimerEl.classList.remove('text-secondary');
         } else { 
-            document.body.classList.remove('!bg-teal-900'); 
-            document.body.classList.add('bg-dark-bg'); 
-            pomodoroTimerEl.classList.remove('text-teal-300');
-            pomodoroTimerEl.classList.add('text-white');
+            pomodoroTimerEl.classList.remove('text-teal-400');
+            pomodoroTimerEl.classList.add('text-secondary');
+        }
+    }
+
+    // CORRECCIÓN: Función auxiliar para limpiar el interval de forma segura
+    function clearPomodoroInterval() {
+        if (pomodoroIntervalId !== null) {
+            clearInterval(pomodoroIntervalId);
+            pomodoroIntervalId = null;
+            console.log("⏹️ Interval del pomodoro limpiado");
         }
     }
 
     function startPomodoro() {
         if (!state.pomodoro) state.pomodoro = { ...defaultState.pomodoro };
-        if (state.pomodoro.isRunning) { 
-            clearInterval(state.pomodoro.timer); 
+        
+        // CORRECCIÓN: Verificar si realmente está corriendo usando pomodoroIntervalId
+        if (pomodoroIntervalId !== null) { 
+            // PAUSAR
+            console.log("⏸️ Pausando pomodoro");
+            clearPomodoroInterval();
             state.pomodoro.isRunning = false;
+            
+            // Calcular tiempo restante basado en endTime
             if (state.pomodoro.endTime && state.pomodoro.endTime > Date.now()) {
                 state.pomodoro.timeLeft = Math.round((state.pomodoro.endTime - Date.now()) / 1000);
             }
             state.pomodoro.endTime = null;
         } else {
+            // INICIAR
+            console.log("▶️ Iniciando pomodoro");
             state.pomodoro.isRunning = true;
             state.pomodoro.endTime = Date.now() + (state.pomodoro.timeLeft * 1000);
             
-            state.pomodoro.timer = setInterval(() => {
+            pomodoroIntervalId = setInterval(() => {
                 const timeLeftMs = (state.pomodoro.endTime || 0) - Date.now();
-                if (timeLeftMs <= 0) handlePomodoroFinish();
-                else state.pomodoro.timeLeft = Math.round(timeLeftMs / 1000);
+                if (timeLeftMs <= 0) {
+                    handlePomodoroFinish();
+                } else {
+                    state.pomodoro.timeLeft = Math.round(timeLeftMs / 1000);
+                }
                 updatePomodoroUI();
             }, 1000);
         }
@@ -1183,11 +1232,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function handlePomodoroFinish() {
-        clearInterval(state.pomodoro.timer);
+        console.log("🍅 Pomodoro terminado!");
+        clearPomodoroInterval();
+        
         if (!state.pomodoro) state.pomodoro = { ...defaultState.pomodoro };
         state.pomodoro.isRunning = false; 
         state.pomodoro.endTime = null;
+        
         playPomodoroSound(state.pomodoro.isBreak);
+        
         if (state.pomodoro.isBreak) { 
             state.pomodoro.isBreak = false; 
             state.pomodoro.timeLeft = 25 * 60; 
@@ -1200,53 +1253,63 @@ document.addEventListener('DOMContentLoaded', () => {
             if (isNaN(state.studyTimeMinutes)) state.studyTimeMinutes = 0; 
             state.studyTimeMinutes += 25; 
             logStudyActivity(); 
-            showNotification("¡Pomodoro! +25 pts. Descanso..."); 
+            showNotification("¡Pomodoro completado! +25 pts. Tiempo de descanso..."); 
         }
         updatePomodoroUI();
+        renderStats(); // Actualizar estadísticas
         saveStateToFirestore();
     }
 
     function resetPomodoro() {
-        clearInterval(state.pomodoro?.timer);
-        state.pomodoro = { ...defaultState.pomodoro };
+        console.log("🔄 Reseteando pomodoro");
+        clearPomodoroInterval();
+        state.pomodoro = { 
+            timeLeft: 25 * 60,
+            isBreak: false,
+            isRunning: false,
+            endTime: null,
+        };
         updatePomodoroUI();
         saveStateToFirestore();
     }
 
+    // CORRECCIÓN: Esta función solo se llama en el PRIMER snapshot
     function checkRunningPomodoro() {
+        console.log("🔍 Verificando pomodoro activo. endTime:", state.pomodoro?.endTime);
+        
+        // Si ya hay un interval corriendo, no hacer nada
+        if (pomodoroIntervalId !== null) {
+            console.log("⚠️ Ya hay un interval activo, ignorando");
+            return;
+        }
+        
         if (state.pomodoro?.endTime && state.pomodoro.endTime > Date.now()) { 
-            state.pomodoro.timeLeft = Math.round((state.pomodoro.endTime - Date.now()) / 1000); 
-            // CORREGIDO: Usar resumePomodoroTimer en lugar de startPomodoro para evitar loop
-            resumePomodoroTimer(); 
-        } else if (state.pomodoro?.endTime && state.pomodoro.endTime <= Date.now()) { 
-            handlePomodoroFinish(); 
-        }
-    }
-
-    // NUEVO: Función para reanudar el timer sin disparar guardado a Firestore
-    function resumePomodoroTimer() {
-        if (!state.pomodoro) state.pomodoro = { ...defaultState.pomodoro };
-        
-        // Limpiar cualquier timer existente
-        if (state.pomodoro.timer) {
-            clearInterval(state.pomodoro.timer);
-        }
-        
-        state.pomodoro.isRunning = true;
-        // IMPORTANTE: Mantener el endTime original, no recalcular
-        
-        state.pomodoro.timer = setInterval(() => {
-            const timeLeftMs = (state.pomodoro.endTime || 0) - Date.now();
-            if (timeLeftMs <= 0) {
-                handlePomodoroFinish();
-            } else {
-                state.pomodoro.timeLeft = Math.round(timeLeftMs / 1000);
-            }
+            // El pomodoro debería estar corriendo
+            console.log("▶️ Reanudando pomodoro activo");
+            state.pomodoro.timeLeft = Math.round((state.pomodoro.endTime - Date.now()) / 1000);
+            state.pomodoro.isRunning = true;
+            
+            // Crear el interval sin guardar a Firestore (para evitar loop)
+            pomodoroIntervalId = setInterval(() => {
+                const timeLeftMs = (state.pomodoro.endTime || 0) - Date.now();
+                if (timeLeftMs <= 0) {
+                    handlePomodoroFinish();
+                } else {
+                    state.pomodoro.timeLeft = Math.round(timeLeftMs / 1000);
+                }
+                updatePomodoroUI();
+            }, 1000);
+            
             updatePomodoroUI();
-        }, 1000);
-        
-        updatePomodoroUI();
-        // NO llamamos a saveStateToFirestore aquí para evitar loop de sincronización
+        } else if (state.pomodoro?.endTime && state.pomodoro.endTime <= Date.now()) { 
+            // El pomodoro expiró mientras estaba offline
+            console.log("⏰ Pomodoro expirado, finalizando");
+            handlePomodoroFinish(); 
+        } else {
+            // No hay pomodoro activo
+            state.pomodoro.isRunning = false;
+            updatePomodoroUI();
+        }
     }
 
     // CORREGIDO: Asegurar que solo se asigne el listener UNA VEZ
