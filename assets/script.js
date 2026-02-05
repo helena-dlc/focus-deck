@@ -1,4 +1,4 @@
-console.log("--- SCRIPT DE FOCUS DECK v5 CARGADO ---");
+console.log("--- SCRIPT DE FOCUS NOOK v5 CARGADO ---");
 
 // --- IMPORTACIONES DE FIREBASE ---
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -281,11 +281,12 @@ document.addEventListener('DOMContentLoaded', () => {
             render();
             checkRunningPomodoro();
             
-            // CORREGIDO: Flag se desactiva más rápido
+            // CORREGIDO: Flag se desactiva después del debounce de guardado (500ms) + margen
+            // para evitar condiciones de carrera con saveStateToFirestore
             setTimeout(() => {
                 isLoadingFromFirebase = false;
                 console.log("🔓 Guardado habilitado");
-            }, 500);
+            }, 750);
         }, (error) => {
             console.error("❌ Error en listener:", error);
             showNotification("Error al sincronizar datos.");
@@ -1141,12 +1142,19 @@ document.addEventListener('DOMContentLoaded', () => {
         const seconds = timeLeft % 60;
         pomodoroTimerEl.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
         if (startPomodoroBtn) startPomodoroBtn.textContent = pom.isRunning ? 'Pausar' : 'Iniciar';
+        
+        // CORREGIDO: Usar las clases correctas que coinciden con el diseño
+        // El body original tiene bg-dark-bg, cambiamos a teal para el break
         if (pom.isBreak) { 
-            document.body.classList.add('bg-teal-900'); 
-            document.body.classList.remove('bg-slate-900'); 
+            document.body.classList.add('!bg-teal-900'); 
+            document.body.classList.remove('bg-dark-bg'); 
+            pomodoroTimerEl.classList.add('text-teal-300');
+            pomodoroTimerEl.classList.remove('text-white');
         } else { 
-            document.body.classList.remove('bg-teal-900'); 
-            document.body.classList.add('bg-slate-900'); 
+            document.body.classList.remove('!bg-teal-900'); 
+            document.body.classList.add('bg-dark-bg'); 
+            pomodoroTimerEl.classList.remove('text-teal-300');
+            pomodoroTimerEl.classList.add('text-white');
         }
     }
 
@@ -1208,10 +1216,37 @@ document.addEventListener('DOMContentLoaded', () => {
     function checkRunningPomodoro() {
         if (state.pomodoro?.endTime && state.pomodoro.endTime > Date.now()) { 
             state.pomodoro.timeLeft = Math.round((state.pomodoro.endTime - Date.now()) / 1000); 
-            startPomodoro(); 
+            // CORREGIDO: Usar resumePomodoroTimer en lugar de startPomodoro para evitar loop
+            resumePomodoroTimer(); 
         } else if (state.pomodoro?.endTime && state.pomodoro.endTime <= Date.now()) { 
             handlePomodoroFinish(); 
         }
+    }
+
+    // NUEVO: Función para reanudar el timer sin disparar guardado a Firestore
+    function resumePomodoroTimer() {
+        if (!state.pomodoro) state.pomodoro = { ...defaultState.pomodoro };
+        
+        // Limpiar cualquier timer existente
+        if (state.pomodoro.timer) {
+            clearInterval(state.pomodoro.timer);
+        }
+        
+        state.pomodoro.isRunning = true;
+        // IMPORTANTE: Mantener el endTime original, no recalcular
+        
+        state.pomodoro.timer = setInterval(() => {
+            const timeLeftMs = (state.pomodoro.endTime || 0) - Date.now();
+            if (timeLeftMs <= 0) {
+                handlePomodoroFinish();
+            } else {
+                state.pomodoro.timeLeft = Math.round(timeLeftMs / 1000);
+            }
+            updatePomodoroUI();
+        }, 1000);
+        
+        updatePomodoroUI();
+        // NO llamamos a saveStateToFirestore aquí para evitar loop de sincronización
     }
 
     // CORREGIDO: Asegurar que solo se asigne el listener UNA VEZ
